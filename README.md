@@ -6,8 +6,8 @@ The product requirements are in [SPEC.md](SPEC.md). The dependency boundaries ar
 recorded in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the current discovery
 work is defined by [docs/PHASE_0_PLAN.md](docs/PHASE_0_PLAN.md).
 
-Phase 0 is complete; its results and accepted decisions are summarized in
-[docs/PHASE_0_REPORT.md](docs/PHASE_0_REPORT.md). Production implementation has not
-started. The next implementation work is defined by
-[docs/PHASE_1_PLAN.md](docs/PHASE_1_PLAN.md). Experimental code remains isolated
-under `spikes/`.
+Phase 0 results and decisions are summarized in
+[docs/PHASE_0_REPORT.md](docs/PHASE_0_REPORT.md). Phase 1's deterministic typography
+core is complete; see [the plan](docs/PHASE_1_PLAN.md) and
+[the report](docs/PHASE_1_REPORT.md). Experimental code remains isolated under
+`spikes/`.

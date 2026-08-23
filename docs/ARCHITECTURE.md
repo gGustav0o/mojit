@@ -24,6 +24,15 @@ Forbidden dependencies:
 The production `TextMask` is a full-viewport alpha plane. Its origin is fixed at
 `(0, 0)`; typography owns glyph placement within that plane.
 
+Core arrays are isolated C-contiguous `uint8` buffers backed by immutable bytes.
+Callers cannot mutate a `TextMask` or `Frame` through the source ndarray or by
+re-enabling the stored array's write flag.
+
+The font adapter is the filesystem boundary: it returns immutable bytes and a SHA-256
+content identity. Typography receives no path or open file handle. `TypographyKey`
+is both the rendering request and cache identity; it contains only values that can
+change the mask.
+
 Phase 0 adapter decisions are recorded in [ADRs](adr/README.md). The WezTerm adapter
 owns Kitty protocol encoding, terminal state, and CLI-socket viewport queries. The
 application owns polling cadence, caching, and frame scheduling.

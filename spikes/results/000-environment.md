@@ -14,7 +14,7 @@ Which concrete environment was used for Phase 0 measurements?
 - AMD Ryzen 7 4800H, 16 logical processors;
 - reference pane: `94 x 44` cells, `940 x 1012` pixels, 96 DPI;
 - font: `C:\Windows\Fonts\YuGothB.ttc`, 14,729,372 bytes,
-  SHA-256 `d923a57fc64a4f1989cc4355829514f25df287e10e7843f4d7175819027d136b`.
+  SHA-256 `d923a57f781f06198167da4f58287be7ac64a954a47aff4295e078a42b4b68b2`.
 
 ## Probe and exact command
 

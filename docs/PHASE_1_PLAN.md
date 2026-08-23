@@ -1,5 +1,7 @@
 # Phase 1: deterministic typography core
 
+Status: completed on 2026-08-23. See [Phase 1 report](PHASE_1_REPORT.md).
+
 ## Goal
 
 Implement and prove the pure domain foundation that transforms validated text,
