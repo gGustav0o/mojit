@@ -1,0 +1,590 @@
+# Техническое задание: `mojit`
+
+## 1. Назначение
+
+`mojit` — CLI-утилита для полноэкранного отображения Unicode-текста, прежде всего японского, в виде крупной анимированной графической композиции внутри терминала.
+
+```powershell
+mojit "電脳世界"
+```
+
+Текст должен:
+
+- занимать максимально возможную часть viewport;
+- рендериться настоящим CJK-шрифтом, не ASCII-art;
+- непрерывно анимироваться выбранным эффектом;
+- перестраиваться при resize терминала;
+- работать неограниченно долго;
+- завершаться по `Ctrl+C`;
+- после завершения восстанавливать состояние терминала.
+
+Целевая среда v1:
+
+```text
+OS:       Windows 11
+Terminal: WezTerm
+Python:   3.11+
+```
+
+Runtime prerequisites:
+
+- WezTerm exposes Kitty graphics protocol and pane pixel dimensions through
+  `wezterm cli list`;
+- vertical mode requires Pillow with Raqm and an available FriBiDi runtime;
+- the selected CJK font is installed or supplied explicitly.
+
+Rendering core не должен зависеть от WezTerm.
+
+---
+
+## 2. Принципы
+
+Приоритеты:
+
+1. корректный визуальный результат;
+2. минимальный объём собственного инфраструктурного кода;
+3. использование Pillow, NumPy, stdlib и terminal graphics protocol;
+4. Functional Core / Imperative Shell;
+5. изоляция и декомпозиция;
+6. DRY;
+7. тестируемость;
+8. отсутствие преждевременной универсализации.
+
+Не реализовывать самостоятельно font rendering, Unicode shaping, image codecs и функциональность, уже предоставляемую используемыми библиотеками.
+
+---
+
+## 3. Не входит в v1
+
+Не требуются:
+
+- собственный font renderer или shaping engine;
+- Qt;
+- OpenGL/Vulkan/DirectX;
+- GUI или TUI framework;
+- plugin system;
+- поддержка терминалов кроме WezTerm;
+- полноценная японская издательская вёрстка;
+- сложный bidirectional layout;
+- сохранение GIF/video;
+- интерактивное редактирование текста.
+
+---
+
+## 4. CLI
+
+```powershell
+mojit "電脳世界"
+mojit "警告" -e glitch
+mojit "猫" --vertical
+mojit "攻殻機動隊" --fps 60
+mojit "警告" --seed 42
+mojit --list-effects
+```
+
+Поддержать:
+
+```text
+--effect, -e
+--vertical
+--horizontal
+--font
+--fps
+--margin
+--seed
+--config
+--list-effects
+--debug
+```
+
+`--horizontal` явно переопределяет orientation из config.
+
+Текст может поступать через stdin:
+
+```powershell
+"少女終末旅行" | mojit
+```
+
+Приоритет:
+
+```text
+positional argument
+↓
+stdin
+```
+
+stdin читается только при отсутствии positional argument.
+
+В Windows текст из pipe декодируется как UTF-8. Некорректная последовательность
+байтов приводит к ошибке ввода до изменения состояния терминала.
+
+---
+
+## 5. Архитектура
+
+Основной поток данных:
+
+```text
+Input
+  ↓
+ResolvedConfig
+  ↓
+Layout / Typography
+  ↓
+TextMask
+  ↓
+Effect / Compositor
+  ↓
+Frame
+  ↓
+TerminalBackend
+```
+
+Нижележащие слои не обращаются к вышележащим.
+
+### Functional Core
+
+Чистыми должны быть, насколько возможно:
+
+- config resolution;
+- layout;
+- font-size selection;
+- typography calculations;
+- effect rendering;
+- compositing;
+- deterministic randomness.
+
+### Imperative Shell
+
+Side effects ограничены:
+
+- CLI/stdin;
+- чтением config;
+- загрузкой font resource;
+- terminal state;
+- resize;
+- clock/frame scheduling;
+- image output;
+- `Ctrl+C`.
+
+Не вводить интерфейсы и фабрики без фактической необходимости.
+
+---
+
+## 6. Основные модели
+
+Domain/configuration structures по возможности immutable.
+
+```python
+Viewport:
+    width_px: int
+    height_px: int
+```
+
+Все layout-расчёты выполняются в пикселях.
+
+```python
+TextMask:
+    width: int
+    height: int
+    alpha: ndarray[uint8]   # H × W
+```
+
+`TextMask` всегда использует координаты полного viewport:
+
+```text
+TextMask.width  == Viewport.width_px
+TextMask.height == Viewport.height_px
+```
+
+Вне текстовой композиции alpha равна нулю. Отдельного origin у маски в v1 нет.
+
+```python
+Frame:
+    width: int
+    height: int
+    rgba: ndarray[uint8]    # H × W × 4
+```
+
+```python
+RenderContext:
+    viewport: Viewport
+    frame_index: int
+    elapsed_seconds: float
+```
+
+Для фиксированного FPS:
+
+```text
+elapsed_seconds = frame_index / fps
+```
+
+Wall-clock time не должен влиять на deterministic rendering.
+
+---
+
+## 7. Typography
+
+Рендеринг текста выполняется через Pillow/FreeType.
+
+Цвет текста не относится к typography layer.
+
+Результатом typography является `TextMask`.
+
+Font loading, Raqm/FriBiDi capability и запрошенный vertical shaping проверяются до
+запуска animation loop и до изменения состояния терминала.
+
+Не выполнять:
+
+- транслитерацию;
+- замену Unicode-глифов ASCII-представлением.
+
+---
+
+## 8. Шрифт
+
+Приоритет:
+
+```text
+CLI --font
+↓
+config font
+↓
+default configured CJK font
+```
+
+В v1 `font` представляет путь к font-файлу:
+
+```toml
+font = "C:/Windows/Fonts/YuGothB.ttc"
+```
+
+Общий Windows font discovery не требуется.
+
+Default path v1:
+
+```text
+C:/Windows/Fonts/YuGothB.ttc
+```
+
+Шрифт не поставляется вместе с приложением. Если он отсутствует, ошибка должна
+предложить установить Windows Japanese Supplemental Fonts либо задать `--font` или
+config `font`.
+
+Недоступный или неподдерживаемый шрифт должен приводить к понятной ошибке до запуска animation loop.
+
+---
+
+## 9. Layout
+
+### Horizontal
+
+Для текста:
+
+```text
+電脳世界
+```
+
+необходимо:
+
+1. определить доступный viewport с учётом margin;
+2. найти максимальный допустимый font size;
+3. получить bounding box;
+4. центрировать композицию;
+5. rasterize alpha mask.
+
+### Margin
+
+```toml
+margin = 0.08
+```
+
+означает резервирование 8% ширины и высоты viewport с каждой стороны.
+
+### Font size
+
+Не использовать линейный перебор.
+
+Найти максимальный размер, удовлетворяющий:
+
+```text
+text_width  <= available_width
+text_height <= available_height
+```
+
+Предпочтительно использовать binary search.
+
+---
+
+## 10. Vertical layout
+
+```powershell
+mojit "電脳世界" --vertical
+```
+
+Вертикальный режим не реализуется через:
+
+```python
+"\n".join(text)
+```
+
+Основной путь:
+
+```text
+Pillow + libraqm
+direction="ttb"
+language="ja"
+```
+
+если такая конфигурация поддерживается используемым окружением.
+
+Вертикальная пунктуация в первую очередь должна обрабатываться shaping/font machinery.
+
+Отдельный этап fallback-коррекций допускается только для известных проблем:
+
+```text
+、
+。
+「」
+『』
+ー
+（）
+```
+
+Такие специальные случаи должны быть локализованы в typography layer и не распространяться по renderer/effects.
+
+---
+
+## 11. Кэширование
+
+`TextMask` пересоздаётся только при изменении параметров, влияющих на typography/layout:
+
+```text
+text
+font
+orientation
+viewport
+margin
+typography options
+```
+
+Ключ кэша должен определяться этими значениями.
+
+Typography остаётся чистой.
+
+Mutable cache принадлежит orchestration/application layer, а не typography или effect implementation.
+
+---
+
+## 12. Effects
+
+Эффект является чистой функцией:
+
+```python
+Effect = Callable[
+    [TextMask, RenderContext, EffectConfig],
+    Frame
+]
+```
+
+Регистрация эффектов:
+
+```python
+EFFECTS = {
+    "neon": render_neon,
+    "glitch": render_glitch,
+    "chromatic": render_chromatic,
+    "pulse": render_pulse,
+}
+```
+
+Не использовать inheritance-based hierarchy без необходимости.
+
+Эффекты не должны:
+
+- обращаться к терминалу;
+- rasterize текст;
+- использовать глобальное mutable state.
+
+---
+
+## 13. Детерминированная случайность
+
+Запрещено использовать глобальное состояние:
+
+```python
+random
+numpy.random
+```
+
+Stochastic effect должен получать локальный random state из:
+
+```text
+seed
+effect identifier
+frame_index
+```
+
+При одинаковых входных данных:
+
+```text
+text
+config
+seed
+frame_index
+viewport
+```
+
+результат должен быть идентичен.
+
+---
+
+## 14. Compositor
+
+Общие графические операции реализуются один раз:
+
+```text
+translate
+scale
+blur
+colorize
+alpha_composite
+crop
+warp
+```
+
+Эффекты компонуются из этих операций.
+
+Нельзя независимо реализовывать одинаковые blending/transformation primitives внутри отдельных эффектов.
+
+---
+
+## 15. Terminal backend
+
+Rendering core ничего не знает о WezTerm.
+
+Backend v1 отвечает за:
+
+```text
+получение viewport в пикселях
+вывод Frame
+управление terminal state
+```
+
+Минимальная семантика:
+
+```python
+get_viewport() -> Viewport
+present(frame: Frame) -> None
+restore() -> None
+```
+
+Конкретный graphics protocol для WezTerm должен быть выбран один для v1 и локализован внутри backend.
+
+v1 использует прямой Kitty Graphics Protocol с PNG payload. Backend повторно
+использует один принадлежащий процессу image ID, заменяет placement, оборачивает
+present в synchronized update и явно удаляет image при restore. Запуск
+`wezterm imgcat` subprocess на каждом кадре запрещён.
+
+Viewport получается bounded-вызовом `wezterm cli list --format json` через отдельный
+WezTerm CLI socket с выбором `WEZTERM_PANE`. Polling выполняется независимо от FPS
+примерно раз в 250 ms. Первый валидный viewport обязателен; при кратковременном сбое
+во время animation сохраняется последнее валидное значение. DPI в layout не
+используется.
+
+Resize detection, animation loop, cursor state и обработка `Ctrl+C` принадлежат imperative shell.
+
+`restore()` должен выполняться также при исключении или interrupt.
+
+`restore()` идемпотентен. При hard termination процесса или уже разорванном output
+channel cleanup-последовательности доставить невозможно; способ восстановления для
+этого ограничения — закрыть затронутый pane.
+
+---
+
+## 16. Animation loop
+
+Цикл:
+
+```text
+read viewport
+↓
+obtain/reuse TextMask
+↓
+construct RenderContext
+↓
+render effect
+↓
+present Frame
+↓
+advance frame_index
+```
+
+При resize:
+
+```text
+Viewport changes
+↓
+TextMask cache miss
+↓
+layout + rasterization
+↓
+animation continues
+```
+
+Текст не rasterize'ится на каждом кадре.
+
+FPS задаёт целевую частоту кадров, но rendering core не занимается ожиданием или синхронизацией времени.
+
+Default — 30 FPS. Более высокие значения, включая `--fps 60`, являются best-effort
+целями и не гарантируются для больших или high-entropy кадров. Scheduling принадлежит
+imperative shell и не передаёт wall-clock time в deterministic rendering.
+
+---
+
+## 17. Конфигурация
+
+CLI имеет приоритет над config:
+
+```text
+CLI
+↓
+config file
+↓
+defaults
+```
+
+Config должен содержать только пользовательские параметры, а не внутренние детали архитектуры.
+
+---
+
+## 18. Критерии готовности v1
+
+Команда:
+
+```powershell
+mojit "電脳世界"
+```
+
+должна:
+
+- корректно отображать CJK-текст в WezTerm;
+- автоматически выбирать максимальный размер;
+- поддерживать horizontal и vertical layout;
+- поддерживать несколько эффектов;
+- корректно реагировать на resize;
+- обеспечивать deterministic `--seed`;
+- работать длительное время без накопления ресурсов;
+- корректно восстанавливать terminal state после `Ctrl+C` и ошибок.
+
+Архитектурная граница v1:
+
+```text
+pure rendering core
++
+small imperative shell
++
+single WezTerm backend
+```
+
+Без универсализации сверх этого.

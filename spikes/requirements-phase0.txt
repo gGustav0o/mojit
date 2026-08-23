@@ -1,0 +1,3 @@
+# Versions used for the recorded Phase 0 measurements.
+numpy==2.2.5
+Pillow==12.3.0
