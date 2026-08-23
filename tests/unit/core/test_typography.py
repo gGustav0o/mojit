@@ -12,6 +12,7 @@ from mojit.core.typography import (
     ShapingUnavailableError,
     TypographyKey,
     rasterize_text_mask,
+    require_shaping_capability,
 )
 
 FINGERPRINT = "a" * 64
@@ -94,6 +95,19 @@ def test_rasterizer_reports_missing_shaping_capability(monkeypatch: pytest.Monke
 
     with pytest.raises(ShapingUnavailableError, match="FriBiDi"):
         rasterize_text_mask(font_data, key)
+
+
+def test_public_shaping_preflight_reports_missing_raqm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("mojit.core.typography.pil_features.check_feature", lambda _: False)
+
+    with pytest.raises(ShapingUnavailableError, match="Raqm/FriBiDi"):
+        require_shaping_capability()
+
+
+def test_public_shaping_preflight_accepts_raqm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("mojit.core.typography.pil_features.check_feature", lambda _: True)
+
+    require_shaping_capability()
 
 
 def test_rasterizer_maps_invalid_matching_font_data(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -118,6 +118,23 @@ stdin читается только при отсутствии positional argum
 В Windows текст из pipe декодируется как UTF-8. Некорректная последовательность
 байтов приводит к ошибке ввода до изменения состояния терминала.
 
+Текст должен быть одной строкой длиной от 1 до 4096 Unicode code points, содержать
+хотя бы один непробельный символ и не содержать NUL. Для piped stdin удаляется ровно
+один завершающий `\r\n` или `\n`; остальные символы и пробелы сохраняются.
+
+Пределы CLI/config:
+
+```text
+fps:     1..60
+margin:  0 <= margin < 0.5
+seed:    signed 64-bit integer
+effect:  [a-z][a-z0-9_-]*
+```
+
+Ошибки пользовательского ввода завершаются с кодом `2`, непредвиденные ошибки — с
+кодом `1`, успешные `--help` и штатное завершение — с кодом `0`. Traceback выводится
+только с `--debug`.
+
 ---
 
 ## 5. Архитектура
@@ -555,6 +572,48 @@ defaults
 ```
 
 Config должен содержать только пользовательские параметры, а не внутренние детали архитектуры.
+
+Допустимые root-level TOML keys:
+
+```text
+effect
+orientation
+font
+fps
+margin
+seed
+```
+
+Неизвестные keys, вложенные tables и неверные TOML types являются ошибкой. Размер
+файла ограничен 1 MiB, encoding — UTF-8. `debug`, `config` и `list-effects` не являются
+TOML-параметрами.
+
+Config выбирается в порядке:
+
+```text
+--config PATH
+↓
+%APPDATA%/mojit/config.toml
+↓
+без config
+```
+
+Явно указанный отсутствующий config является ошибкой; отсутствие default config —
+нормальная ситуация. `--config -` запрещён, поскольку stdin зарезервирован для текста.
+Относительный `--font` разрешается от current working directory, относительный `font`
+из TOML — от директории config-файла.
+
+Defaults v1:
+
+```text
+effect:       neon
+orientation:  horizontal
+font:         C:/Windows/Fonts/YuGothB.ttc
+fps:          30
+margin:       0.08
+seed:         0
+debug:        false
+```
 
 ---
 

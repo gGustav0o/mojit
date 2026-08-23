@@ -77,7 +77,8 @@ class TypographyKey:
         return "ttb" if self.orientation is Orientation.VERTICAL else "ltr"
 
 
-def _require_raqm() -> None:
+def require_shaping_capability() -> None:
+    """Fail early when the required Raqm/FriBiDi shaping path is unavailable."""
     try:
         available = pil_features.check_feature("raqm")
     except (ValueError, TypeError):
@@ -113,7 +114,7 @@ def rasterize_text_mask(font_data: bytes, key: TypographyKey) -> TextMask:
         raise FontDataError("font_data must be non-empty bytes")
     if hashlib.sha256(font_data).hexdigest() != key.font_fingerprint:
         raise FontDataError("font data does not match font_fingerprint")
-    _require_raqm()
+    require_shaping_capability()
 
     available = available_box(key.viewport, key.margin)
     options = _options(key)

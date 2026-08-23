@@ -4,6 +4,7 @@
 The physical layout is intended to enforce these dependency directions:
 
 ```text
+config.models ────────────────► core.models
 config.resolve ───────────────► config.models
 core ─────────────────────────► no project layer
 effects ──────────────────────► core
@@ -32,6 +33,16 @@ The font adapter is the filesystem boundary: it returns immutable bytes and a SH
 content identity. Typography receives no path or open file handle. `TypographyKey`
 is both the rendering request and cache identity; it contains only values that can
 change the mask.
+
+The config-file adapter owns discovery, bounded reads, and UTF-8 decoding. The TOML
+module is pure and accepts only a closed set of root-level keys. Config resolution is
+an explicit field-by-field `CLI > file > defaults` operation with source-relative font
+paths.
+
+The CLI is the Phase 2 composition root. Before terminal access it resolves one-line
+Unicode input, loads and validates the font, checks Raqm/FriBiDi, and creates an
+immutable `PreparedRun`. That request contains values and font bytes only: no paths,
+streams, parsed TOML, CLI namespaces, environment, or adapter objects.
 
 Phase 0 adapter decisions are recorded in [ADRs](adr/README.md). The WezTerm adapter
 owns Kitty protocol encoding, terminal state, and CLI-socket viewport queries. The
