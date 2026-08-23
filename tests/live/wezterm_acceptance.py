@@ -1,0 +1,243 @@
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from functools import partial
+
+import pytest
+
+from mojit.adapters.clock import SystemMonotonicClock
+from mojit.adapters.font_resource import load_font_resource
+from mojit.adapters.wezterm.backend import WezTermBackend
+from mojit.adapters.wezterm.kitty_protocol import make_image_id
+from mojit.adapters.wezterm.viewport import parse_pane_id, query_pane_geometry
+from mojit.application.request import PreparedRun
+from mojit.application.runtime import AnimationResult, run_animation
+from mojit.core.models import Frame, Orientation, Viewport
+from mojit.core.typography import require_shaping_capability
+
+pytestmark = pytest.mark.wezterm_live
+
+FONT_PATH = "C:/Windows/Fonts/YuGothB.ttc"
+
+
+class LiveOutput:
+    __slots__ = ("_stream", "bytes_written", "flushes", "max_write")
+
+    def __init__(self) -> None:
+        stream = getattr(sys.stdout, "buffer", None)
+        if stream is None or not sys.stdout.isatty():
+            raise AssertionError("live acceptance requires interactive binary stdout")
+        self._stream = stream
+        self.bytes_written = 0
+        self.flushes = 0
+        self.max_write = 0
+
+    def write(self, value: bytes | memoryview) -> int:
+        written = self._stream.write(value)
+        self.bytes_written += written
+        self.max_write = max(self.max_write, written)
+        return written
+
+    def flush(self) -> None:
+        self._stream.flush()
+        self.flushes += 1
+
+
+@dataclass(slots=True)
+class PresentationMetrics:
+    frames: int = 0
+    latency_sum_seconds: float = 0.0
+    latency_max_seconds: float = 0.0
+
+
+class MeasuredBackend:
+    __slots__ = ("_backend", "_fail_after", "metrics")
+
+    def __init__(self, backend: WezTermBackend, *, fail_after: int | None = None) -> None:
+        self._backend = backend
+        self._fail_after = fail_after
+        self.metrics = PresentationMetrics()
+
+    def get_viewport(self) -> Viewport | None:
+        return self._backend.get_viewport()
+
+    def present(self, frame: Frame) -> None:
+        if self._fail_after is not None and self.metrics.frames == self._fail_after:
+            raise RuntimeError("injected live runtime failure")
+        started = time.perf_counter()
+        self._backend.present(frame)
+        latency = time.perf_counter() - started
+        self.metrics.frames += 1
+        self.metrics.latency_sum_seconds += latency
+        self.metrics.latency_max_seconds = max(self.metrics.latency_max_seconds, latency)
+
+
+def _request(orientation: Orientation, *, fps: int = 30) -> PreparedRun:
+    font = load_font_resource(FONT_PATH)
+    require_shaping_capability()
+    return PreparedRun(
+        text="電脳世界",
+        effect_id="neon",
+        orientation=orientation,
+        font_data=font.data,
+        font_fingerprint=font.fingerprint,
+        fps=fps,
+        margin=0.08,
+        seed=42,
+    )
+
+
+def _backend() -> tuple[WezTermBackend, LiveOutput]:
+    output = LiveOutput()
+    pane_id = parse_pane_id(os.environ)
+    backend = WezTermBackend(
+        pane_id=pane_id,
+        output=output,  # type: ignore[arg-type]
+        image_id=make_image_id(os.getpid()),
+        query_geometry=partial(query_pane_geometry),
+    )
+    return backend, output
+
+
+def _visible_cursor() -> bool:
+    pane_id = parse_pane_id(os.environ)
+    result = subprocess.run(
+        ("wezterm", "cli", "list", "--format", "json"),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        check=True,
+        timeout=2.0,
+    )
+    panes = json.loads(result.stdout.decode("utf-8", errors="strict"))
+    matches = [pane for pane in panes if pane.get("pane_id") == pane_id]
+    return len(matches) == 1 and matches[0].get("cursor_visibility") == "Visible"
+
+
+def _run_bounded(
+    orientation: Orientation,
+    *,
+    frames: int,
+    fail_after: int | None = None,
+    should_stop: Callable[[], bool] | None = None,
+) -> tuple[AnimationResult | None, PresentationMetrics, LiveOutput]:
+    request = _request(orientation)
+    backend, output = _backend()
+    measured = MeasuredBackend(backend, fail_after=fail_after)
+    result: AnimationResult | None = None
+    backend.preflight()
+    try:
+        backend.enter()
+        result = run_animation(
+            request,
+            backend=measured,
+            clock=SystemMonotonicClock(),
+            should_stop=should_stop or (lambda: measured.metrics.frames == frames),
+        )
+    finally:
+        backend.restore()
+        backend.restore()
+    return result, measured.metrics, output
+
+
+@pytest.mark.parametrize("orientation", list(Orientation))
+def test_live_cjk_orientation_and_restore(orientation: Orientation) -> None:
+    result, metrics, output = _run_bounded(orientation, frames=12)
+    assert result is not None
+    assert result.presented_frames == 12
+    assert metrics.frames == 12
+    assert output.bytes_written > 0
+    assert _visible_cursor()
+
+
+def test_live_runtime_failure_and_repeated_restore() -> None:
+    with pytest.raises(RuntimeError, match="injected live runtime failure"):
+        _run_bounded(Orientation.HORIZONTAL, frames=20, fail_after=3)
+    assert _visible_cursor()
+
+
+def _wezterm_working_set() -> int:
+    command = "(Get-Process wezterm-gui | Measure-Object -Property WorkingSet64 -Sum).Sum"
+    result = subprocess.run(
+        ("powershell.exe", "-NoProfile", "-Command", command),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        check=True,
+        timeout=5.0,
+    )
+    return int(result.stdout.decode("ascii", errors="strict").strip())
+
+
+def _adjust_pane(direction: str) -> None:
+    subprocess.run(
+        (
+            "wezterm",
+            "cli",
+            "adjust-pane-size",
+            "--pane-id",
+            os.environ["WEZTERM_PANE"],
+            "--amount",
+            "4",
+            direction,
+        ),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        check=True,
+        timeout=2.0,
+    )
+
+
+def test_live_structured_soak_with_resize_metrics() -> None:
+    duration = float(os.environ.get("MOJIT_LIVE_SOAK_SECONDS", "300"))
+    assert duration >= 1.0
+    started = time.perf_counter()
+    next_resize_at = started + min(1.0, duration / 4.0)
+    resize_attempts = 0
+    working_set_before = _wezterm_working_set()
+
+    def stop_or_resize() -> bool:
+        nonlocal next_resize_at, resize_attempts
+        now = time.perf_counter()
+        if now >= next_resize_at and resize_attempts < 4:
+            _adjust_pane("Left" if resize_attempts % 2 == 0 else "Right")
+            resize_attempts += 1
+            next_resize_at = started + duration * (resize_attempts + 1) / 5.0
+        return now - started >= duration
+
+    result, metrics, output = _run_bounded(
+        Orientation.HORIZONTAL,
+        frames=0,
+        should_stop=stop_or_resize,
+    )
+    working_set_after = _wezterm_working_set()
+
+    assert result is not None
+    assert result.presented_frames == metrics.frames
+    assert result.presented_frames > 0
+    assert resize_attempts == 4
+    assert result.viewport_changes >= 2
+    assert _visible_cursor()
+    print(
+        "MOJIT_LIVE_METRICS="
+        + json.dumps(
+            {
+                "duration_seconds": duration,
+                "frames": metrics.frames,
+                "average_present_ms": (metrics.latency_sum_seconds / metrics.frames * 1_000.0),
+                "maximum_present_ms": metrics.latency_max_seconds * 1_000.0,
+                "terminal_bytes": output.bytes_written,
+                "maximum_write_bytes": output.max_write,
+                "viewport_changes": result.viewport_changes,
+                "resize_attempts": resize_attempts,
+                "wezterm_working_set_before": working_set_before,
+                "wezterm_working_set_after": working_set_after,
+                "wezterm_working_set_delta": working_set_after - working_set_before,
+            },
+            sort_keys=True,
+        )
+    )

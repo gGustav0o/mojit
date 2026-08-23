@@ -69,8 +69,8 @@ Application orchestration depends on two structural ports: `AnimationBackend`
 provides viewport samples and accepts complete frames, while `MonotonicClock`
 provides time and sleeping. Concrete adapters satisfy these protocols without
 inheriting from application classes. The application-facing backend port deliberately
-does not expose terminal restoration; the Phase 5 composition root will own the
-production backend lifecycle and call idempotent restore in `finally`.
+does not expose terminal restoration; the CLI composition root owns the production
+backend lifecycle and cleanup.
 
 `TextMaskCache` is application-owned and retains only the active
 `TypographyKey -> TextMask` pair. Replacement is committed only after successful
@@ -83,6 +83,14 @@ uses absolute deadlines, drops missed frame indices, polls viewport on an indepe
 `RenderSession` is the pure composition boundary from `PreparedRun`, `Viewport`, and
 frame index to `Frame`; the synchronous loop alone reads the clock, polls, sleeps, and
 presents. Neither object retains frame history.
+
+The production WezTerm adapter is a one-terminal imperative shell. Pure modules own
+pane-JSON parsing, PNG conversion, and Kitty command chunks. `viewport.py` alone runs
+the timeout-bounded WezTerm CLI subprocess; `terminal_state.py` alone writes escape
+bytes; `backend.py` composes both without importing application. The CLI preflights
+the initial pane geometry before mutation, then enters terminal state, invokes the
+Phase 4 loop, and preserves both runtime and cleanup failures when restoration also
+fails.
 
 No plugin system, abstract factory, dependency-injection container, or generic
 cross-terminal hierarchy is planned for v1. One structural terminal contract may be

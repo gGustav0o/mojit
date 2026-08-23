@@ -135,6 +135,11 @@ effect:  [a-z][a-z0-9_-]*
 кодом `1`, успешные `--help` и штатное завершение — с кодом `0`. Traceback выводится
 только с `--debug`.
 
+`Ctrl+C` является штатным завершением непрерывной animation и возвращает `0`, если
+terminal state успешно восстановлен. Любая ошибка cleanup возвращает `1`, включая
+cleanup после interrupt. Если runtime и cleanup завершаются ошибкой одновременно,
+диагностика должна сохранять обе причины.
+
 ---
 
 ## 5. Архитектура
@@ -549,6 +554,20 @@ v1 использует прямой Kitty Graphics Protocol с PNG payload. Bac
 present в synchronized update и явно удаляет image при restore. Запуск
 `wezterm imgcat` subprocess на каждом кадре запрещён.
 
+До первого terminal-control byte production shell обязан завершить preflight:
+
+```text
+PreparedRun полностью валиден
+stdout является интерактивным terminal output
+WEZTERM_PANE содержит неотрицательный decimal pane ID
+bounded wezterm cli list находит ровно этот pane
+pixel и cell geometry валидны
+```
+
+Успешный exact-pane вызов WezTerm CLI является v1 capability proof. Отдельный Kitty
+query с чтением terminal reply не выполняется: stdin может содержать piped text и
+принадлежит только input boundary.
+
 Viewport получается bounded-вызовом `wezterm cli list --format json` через отдельный
 WezTerm CLI socket с выбором `WEZTERM_PANE`. Polling выполняется независимо от FPS
 примерно раз в 250 ms. Первый валидный viewport обязателен; при кратковременном сбое
@@ -559,7 +578,11 @@ Resize detection, animation loop, cursor state и обработка `Ctrl+C` п
 
 `restore()` должен выполняться также при исключении или interrupt.
 
-`restore()` идемпотентен. При hard termination процесса или уже разорванном output
+После успешного `restore()` повторный вызов не выводит дополнительные bytes. После
+ошибки cleanup восстановление остаётся retryable и не считается успешным. Ошибка
+entry после частичной записи также требует полной cleanup-последовательности.
+
+При hard termination процесса или уже разорванном output
 channel cleanup-последовательности доставить невозможно; способ восстановления для
 этого ограничения — закрыть затронутый pane.
 

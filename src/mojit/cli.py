@@ -10,12 +10,16 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TextIO
+from typing import BinaryIO, TextIO, cast
 
+from mojit.adapters.clock import SystemMonotonicClock
 from mojit.adapters.config_file import ConfigFileError, load_config_document
 from mojit.adapters.font_resource import FontResourceError, load_font_resource
+from mojit.adapters.wezterm.backend import WezTermBackend
+from mojit.adapters.wezterm.errors import WezTermPreflightError
 from mojit.application.input_text import InputTextError, resolve_input_text
 from mojit.application.request import PreparedRun
+from mojit.application.runtime import run_animation
 from mojit.config.models import ConfigOverrides, ConfigValidationError
 from mojit.config.resolve import resolve_config
 from mojit.config.toml import ConfigSyntaxError, parse_toml_config
@@ -26,6 +30,23 @@ from mojit.effects.registry import UnknownEffectError, effect_names, get_effect
 
 class CliUsageError(ValueError):
     """Command-line arguments violate the CLI contract."""
+
+
+class LifecycleFailure(RuntimeError):
+    """Terminal cleanup failed, optionally alongside a primary runtime failure."""
+
+    def __init__(self, primary: BaseException | None, cleanup: BaseException) -> None:
+        self.primary = primary
+        self.cleanup = cleanup
+        cleanup_text = f"{type(cleanup).__name__}: {cleanup}"
+        if primary is None:
+            message = f"terminal cleanup failed ({cleanup_text})"
+        else:
+            primary_text = f"{type(primary).__name__}: {primary}"
+            message = (
+                f"runtime failed ({primary_text}); terminal cleanup also failed ({cleanup_text})"
+            )
+        super().__init__(message)
 
 
 class _CliExit(Exception):
@@ -170,6 +191,7 @@ _USER_ERRORS = (
     FontResourceError,
     ShapingUnavailableError,
     UnknownEffectError,
+    WezTermPreflightError,
 )
 
 
@@ -177,6 +199,46 @@ def _configure_piped_stdin(stdin: TextIO) -> None:
     reconfigure = getattr(stdin, "reconfigure", None)
     if callable(reconfigure):
         reconfigure(encoding="utf-8", errors="strict")
+
+
+def _create_backend(
+    environ: Mapping[str, str],
+    stdout: TextIO,
+) -> WezTermBackend:
+    binary = getattr(stdout, "buffer", None)
+    if binary is None:
+        raise WezTermPreflightError("stdout does not expose a binary terminal stream")
+    return WezTermBackend.from_environment(
+        environ,
+        output=cast(BinaryIO, binary),
+        output_is_terminal=stdout.isatty(),
+    )
+
+
+def execute_prepared_run(
+    request: PreparedRun,
+    *,
+    backend: WezTermBackend,
+    clock: SystemMonotonicClock,
+) -> None:
+    """Run one lifecycle without losing either primary or cleanup failures."""
+    backend.preflight()
+    primary: BaseException | None = None
+    try:
+        backend.enter()
+        run_animation(request, backend=backend, clock=clock)
+    except BaseException as error:  # noqa: BLE001  # cleanup includes interrupt
+        primary = error
+
+    try:
+        backend.restore()
+    except BaseException as cleanup:  # cleanup failure must be retained
+        raise LifecycleFailure(primary, cleanup) from cleanup
+
+    if isinstance(primary, KeyboardInterrupt):
+        return
+    if primary is not None:
+        raise primary
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -189,9 +251,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if parsed.text is None:
             _configure_piped_stdin(sys.stdin)
-        prepare_run(parsed, stdin=sys.stdin, environ=os.environ, cwd=Path.cwd().resolve())
-        print("mojit: rendering runtime is not implemented yet", file=sys.stderr)
-        return 1
+        request = prepare_run(parsed, stdin=sys.stdin, environ=os.environ, cwd=Path.cwd().resolve())
+        backend = _create_backend(os.environ, sys.stdout)
+        execute_prepared_run(
+            request,
+            backend=backend,
+            clock=SystemMonotonicClock(),
+        )
+        return 0
     except _CliExit as exit_request:
         return exit_request.status
     except _USER_ERRORS as error:
@@ -200,6 +267,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             print(f"mojit: {error}", file=sys.stderr)
         return 2
+    except KeyboardInterrupt:
+        return 0
     except Exception as error:  # noqa: BLE001  # pragma: no cover - process boundary
         if parsed is not None and parsed.debug:
             traceback.print_exc()

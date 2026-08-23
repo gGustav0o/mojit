@@ -10,6 +10,9 @@ CONFIG_ROOT = SOURCE_ROOT / "config"
 APPLICATION_REQUEST = SOURCE_ROOT / "application" / "request.py"
 APPLICATION_ROOT = SOURCE_ROOT / "application"
 EFFECTS_ROOT = SOURCE_ROOT / "effects"
+WEZTERM_ROOT = SOURCE_ROOT / "adapters" / "wezterm"
+WEZTERM_BACKEND = WEZTERM_ROOT / "backend.py"
+WEZTERM_VIEWPORT = WEZTERM_ROOT / "viewport.py"
 FORBIDDEN_CORE_PREFIXES = ("mojit.application", "mojit.adapters", "mojit.config", "mojit.cli")
 FORBIDDEN_CONFIG_PREFIXES = ("mojit.application", "mojit.adapters", "mojit.effects", "mojit.cli")
 FORBIDDEN_REQUEST_PREFIXES = ("mojit.adapters", "mojit.config", "mojit.cli")
@@ -22,6 +25,7 @@ FORBIDDEN_EFFECT_PREFIXES = (
     "mojit.cli",
 )
 FORBIDDEN_EFFECT_MODULES = {"os", "pathlib", "random", "subprocess", "time"}
+FORBIDDEN_WEZTERM_PREFIXES = ("mojit.application", "mojit.config", "mojit.effects", "mojit.cli")
 
 
 def _imports(path: Path) -> list[str]:
@@ -111,3 +115,30 @@ def test_concrete_effects_do_not_import_registry() -> None:
             violations.append(str(path.relative_to(PROJECT_ROOT)))
 
     assert violations == []
+
+
+def test_wezterm_adapter_does_not_import_application_or_shell_composition() -> None:
+    violations: list[str] = []
+    for path in WEZTERM_ROOT.rglob("*.py"):
+        for imported in _imports(path):
+            if imported.startswith(FORBIDDEN_WEZTERM_PREFIXES):
+                violations.append(f"{path.relative_to(PROJECT_ROOT)} -> {imported}")
+
+    assert violations == []
+
+
+def test_subprocess_access_is_isolated_to_viewport_adapter() -> None:
+    violations: list[str] = []
+    for path in WEZTERM_ROOT.rglob("*.py"):
+        if path == WEZTERM_VIEWPORT:
+            continue
+        if "subprocess" in _imports(path):
+            violations.append(str(path.relative_to(PROJECT_ROOT)))
+
+    assert violations == []
+
+
+def test_wezterm_backend_is_application_port_agnostic() -> None:
+    assert not any(
+        imported.startswith("mojit.application") for imported in _imports(WEZTERM_BACKEND)
+    )

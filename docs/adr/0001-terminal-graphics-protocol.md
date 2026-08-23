@@ -36,10 +36,15 @@ The WezTerm adapter uses direct Kitty Graphics Protocol with:
 The default is 30 FPS. `--fps 60` is a target requested by the user, not a guarantee.
 Effects must avoid assuming that full-screen high-entropy 1080p frames are cheap.
 
+Production preflight proves the target through an interactive binary stdout,
+`WEZTERM_PANE`, and one timeout-bounded exact-pane
+`wezterm cli list --format json` call. v1 does not emit a Kitty capability query and
+read its reply: terminal input may be the user's piped text and remains isolated.
+
 ## Consequences and follow-up
 
 - Protocol encoding and terminal state remain private to `adapters.wezterm`.
-- Production startup must perform a bounded Kitty capability check.
+- Production startup must perform the bounded exact-pane WezTerm preflight above.
 - The application scheduler may drop lateness; the renderer remains deterministic by
   frame index.
 - `imgcat` may be used diagnostically, never as the frame path.

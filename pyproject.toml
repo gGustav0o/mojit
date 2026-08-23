@@ -31,6 +31,7 @@ addopts = "-ra"
 testpaths = ["tests"]
 markers = [
     "typography_reference: requires the recorded Windows CJK font and Raqm/FriBiDi",
+    "wezterm_live: requires an interactive disposable WezTerm pane",
 ]
 
 [tool.ruff]
