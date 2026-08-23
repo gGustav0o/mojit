@@ -1,5 +1,5 @@
 """Module entry point for ``python -m mojit``."""
 
-from mojit.cli import main
+from mojit.bootstrap import main
 
 raise SystemExit(main())

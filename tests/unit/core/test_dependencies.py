@@ -13,6 +13,8 @@ EFFECTS_ROOT = SOURCE_ROOT / "effects"
 WEZTERM_ROOT = SOURCE_ROOT / "adapters" / "wezterm"
 WEZTERM_BACKEND = WEZTERM_ROOT / "backend.py"
 WEZTERM_VIEWPORT = WEZTERM_ROOT / "viewport.py"
+BOOTSTRAP = SOURCE_ROOT / "bootstrap.py"
+NATIVE_RUNTIME = SOURCE_ROOT / "native_runtime.py"
 FORBIDDEN_CORE_PREFIXES = ("mojit.application", "mojit.adapters", "mojit.config", "mojit.cli")
 FORBIDDEN_CONFIG_PREFIXES = ("mojit.application", "mojit.adapters", "mojit.effects", "mojit.cli")
 FORBIDDEN_REQUEST_PREFIXES = ("mojit.adapters", "mojit.config", "mojit.cli")
@@ -142,3 +144,41 @@ def test_wezterm_backend_is_application_port_agnostic() -> None:
     assert not any(
         imported.startswith("mojit.application") for imported in _imports(WEZTERM_BACKEND)
     )
+
+
+def test_native_runtime_isolated_from_application_and_third_party_modules() -> None:
+    allowed = {
+        "__future__",
+        "collections",
+        "ctypes",
+        "dataclasses",
+        "os",
+        "pathlib",
+        "platform",
+        "sys",
+        "threading",
+        "typing",
+    }
+    violations = [
+        imported for imported in _imports(NATIVE_RUNTIME) if imported.split(".")[0] not in allowed
+    ]
+    assert violations == []
+
+
+def test_bootstrap_is_the_only_production_importer_of_native_runtime() -> None:
+    importers = []
+    for path in SOURCE_ROOT.rglob("*.py"):
+        if any(imported == "mojit.native_runtime" for imported in _imports(path)):
+            importers.append(path.relative_to(SOURCE_ROOT).as_posix())
+    assert importers == ["bootstrap.py"]
+
+
+def test_bootstrap_does_not_import_cli_at_module_scope() -> None:
+    tree = ast.parse(BOOTSTRAP.read_text(encoding="utf-8"), filename=str(BOOTSTRAP))
+    top_level_imports: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            top_level_imports.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            top_level_imports.append(node.module)
+    assert "mojit.cli" not in top_level_imports

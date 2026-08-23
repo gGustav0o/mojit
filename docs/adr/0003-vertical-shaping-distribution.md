@@ -28,8 +28,10 @@ visually acceptable. The BASIC layout engine rejected vertical direction.
 v1 uses Pillow/FreeType/Raqm with `direction="ttb"` and `language="ja"`. Release
 artifacts must include an application-controlled, versioned FriBiDi Windows runtime
 and its required license notices. The composition root makes its DLL directory
-available before importing Pillow's native text stack and retains the directory
-handle for the process lifetime.
+available before importing Pillow's native text stack. It enables secure default/user
+DLL search, loads the packaged DLL by absolute path, and retains both handles for the
+process lifetime. This prevents an earlier same-named DLL on `PATH` from shadowing
+the packaged runtime.
 
 Startup checks Raqm and FriBiDi capability before terminal mutation. Missing support
 is a fatal, actionable error. There is no manual vertical fallback in v1.
@@ -41,7 +43,8 @@ is a fatal, actionable error. There is no manual vertical fallback in v1.
 - CI must test a clean Windows image with ambient third-party DLL directories removed.
 - Source development may use a system FriBiDi, but passing locally through unrelated
   `PATH` entries is not release evidence.
-- The packaging phase cannot close until the clean-image test passes.
+- Phase 6 pins FriBiDi 1.0.16, retains the complete upstream source, and verifies
+  byte-reproducible MSVC `/Brepro` builds plus CPython 3.11-3.14 artifact installs.
 
 ## References
 

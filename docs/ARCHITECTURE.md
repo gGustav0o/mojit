@@ -11,6 +11,7 @@ effects ──────────────────────► co
 application ──────────────────► core + effects
 adapters ─────────────────────► core models
 cli (composition root) ───────► application + adapters + config
+bootstrap ────────────────────► native runtime, then cli
 ```
 
 Forbidden dependencies:
@@ -91,6 +92,14 @@ bytes; `backend.py` composes both without importing application. The CLI preflig
 the initial pane geometry before mutation, then enters terminal state, invokes the
 Phase 4 loop, and preserves both runtime and cleanup failures when restoration also
 fails.
+
+The installed command and `python -m mojit` share one outer bootstrap. Before any
+Pillow or CLI import, `native_runtime.py` enables Windows default/user DLL search,
+registers only the package's `_native/win_amd64` directory, loads FriBiDi by absolute
+path, and retains both handles for process lifetime. This boundary never reads CWD,
+scans or mutates `PATH`, downloads code, or leaks packaging concerns into core,
+effects, application, or terminal adapters. The wheel is therefore explicitly tagged
+`py3-none-win_amd64`.
 
 No plugin system, abstract factory, dependency-injection container, or generic
 cross-terminal hierarchy is planned for v1. One structural terminal contract may be

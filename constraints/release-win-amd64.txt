@@ -1,0 +1,8 @@
+# Phase 6 release inputs. Keep synchronized with pyproject.toml and the report.
+numpy==2.4.6
+Pillow==12.3.0
+build==1.5.0
+meson==1.12.0
+setuptools==80.10.2
+uv==0.12.5
+wheel==0.48.0

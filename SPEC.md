@@ -23,14 +23,15 @@ mojit "電脳世界"
 ```text
 OS:       Windows 11
 Terminal: WezTerm
-Python:   3.11+
+Python:   CPython 3.11-3.14 x64
 ```
 
 Runtime prerequisites:
 
 - WezTerm exposes Kitty graphics protocol and pane pixel dimensions through
   `wezterm cli list`;
-- vertical mode requires Pillow with Raqm and an available FriBiDi runtime;
+- the Windows x64 release wheel supplies its own versioned FriBiDi runtime and
+  activates it before importing Pillow/Raqm;
 - the selected CJK font is installed or supplied explicitly.
 
 Rendering core не должен зависеть от WezTerm.

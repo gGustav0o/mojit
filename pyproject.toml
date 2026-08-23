@@ -1,16 +1,32 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools==80.10.2", "wheel==0.48.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "mojit"
-version = "0.0.0"
+version = "1.0.0"
 description = "Animated Unicode compositions rendered inside WezTerm"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.15"
+license = "MIT"
+license-files = [
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "src/mojit/_native/licenses/*",
+]
 dependencies = [
-    "numpy>=1.26",
-    "Pillow>=10",
+    "numpy==2.4.6",
+    "Pillow==12.3.0",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 
 [project.optional-dependencies]
@@ -21,10 +37,17 @@ dev = [
 ]
 
 [project.scripts]
-mojit = "mojit.cli:main"
+mojit = "mojit.bootstrap:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+mojit = [
+    "_native/manifest.toml",
+    "_native/win_amd64/*.dll",
+    "_native/licenses/*",
+]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
