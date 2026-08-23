@@ -8,4 +8,6 @@ work is defined by [docs/PHASE_0_PLAN.md](docs/PHASE_0_PLAN.md).
 
 Phase 0 is complete; its results and accepted decisions are summarized in
 [docs/PHASE_0_REPORT.md](docs/PHASE_0_REPORT.md). Production implementation has not
-started. Experimental code remains isolated under `spikes/`.
+started. The next implementation work is defined by
+[docs/PHASE_1_PLAN.md](docs/PHASE_1_PLAN.md). Experimental code remains isolated
+under `spikes/`.
