@@ -105,7 +105,9 @@ def test_usage_error_has_no_traceback(capsys: pytest.CaptureFixture[str]) -> Non
     assert "\x1b" not in captured.out + captured.err
 
 
-def test_list_mode_does_not_touch_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_mode_does_not_touch_stdin(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     class PoisonStdin(io.StringIO):
         def reconfigure(self, **kwargs: object) -> None:
             raise AssertionError("stdin was reconfigured")
@@ -114,7 +116,10 @@ def test_list_mode_does_not_touch_stdin(monkeypatch: pytest.MonkeyPatch) -> None
             raise AssertionError("stdin was inspected")
 
     monkeypatch.setattr("sys.stdin", PoisonStdin())
-    assert main(["--list-effects"]) == 1
+    assert main(["--list-effects"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "chromatic\nglitch\nneon\npulse\n"
+    assert captured.err == ""
 
 
 def test_debug_exposes_traceback_at_outer_boundary(

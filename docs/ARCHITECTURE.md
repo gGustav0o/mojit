@@ -44,6 +44,23 @@ Unicode input, loads and validates the font, checks Raqm/FriBiDi, and creates an
 immutable `PreparedRun`. That request contains values and font bytes only: no paths,
 streams, parsed TOML, CLI namespaces, environment, or adapter objects.
 
+The compositor is a pure full-viewport boundary. Transform operations accept
+immutable `TextMask`/`Frame` values, use clipped transparent edges, and return new
+immutable values. Pillow owns LANCZOS resize, Gaussian blur, and source-over alpha;
+NumPy owns clipped translation, band displacement, and channel assembly. Effects do
+not duplicate these operations.
+
+Effects are plain callables over `TextMask`, `RenderContext`, and frozen
+`EffectConfig(seed)`. Continuous animation uses deterministic elapsed time; glitch
+uses a fresh Phase 1 RNG derived from seed, fixed effect ID, and frame index. The
+immutable registry is the only name-to-renderer mapping. Concrete effects never
+import the registry, shell layers, I/O, clocks, or global RNG modules.
+
+The CLI now checks an effect identifier against the registry before text/font work.
+`--list-effects` reads only the immutable registry and therefore performs no config,
+stdin, font, shaping, subprocess, or terminal access. `PreparedRun` continues to
+contain an effect identifier rather than a renderer.
+
 Phase 0 adapter decisions are recorded in [ADRs](adr/README.md). The WezTerm adapter
 owns Kitty protocol encoding, terminal state, and CLI-socket viewport queries. The
 application owns polling cadence, caching, and frame scheduling.

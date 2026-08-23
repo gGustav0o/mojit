@@ -12,6 +12,7 @@ from mojit.adapters.font_resource import FontResource, FontResourceError
 from mojit.application.input_text import InputTextError
 from mojit.core.models import Orientation
 from mojit.core.typography import ShapingUnavailableError
+from mojit.effects.registry import UnknownEffectError
 
 
 class Pipe(io.StringIO):
@@ -138,6 +139,23 @@ def test_invalid_input_fails_before_font_loading(
         cli.prepare_run(cli.parse_cli([]), stdin=Pipe("\n"), environ={}, cwd=tmp_path)
 
 
+def test_unknown_effect_fails_before_text_and_font_io(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        cli,
+        "load_font_resource",
+        lambda path: pytest.fail(f"font was loaded for unknown effect: {path}"),
+    )
+    with pytest.raises(UnknownEffectError, match="unknown"):
+        cli.prepare_run(
+            cli.parse_cli(["--effect", "unknown"]),
+            stdin=PoisonPipe(),
+            environ={},
+            cwd=tmp_path,
+        )
+
+
 def test_malformed_explicit_config_fails_before_font_loading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -214,6 +232,8 @@ def test_list_mode_main_performs_no_config_font_or_shaping_io(
     monkeypatch.setattr(cli, "load_font_resource", lambda *args, **kwargs: pytest.fail("font"))
     monkeypatch.setattr(cli, "require_shaping_capability", lambda: pytest.fail("shaping"))
 
-    assert cli.main(["--list-effects"]) == 1
+    assert cli.main(["--list-effects"]) == 0
     captured = capsys.readouterr()
+    assert captured.out == "chromatic\nglitch\nneon\npulse\n"
+    assert captured.err == ""
     assert "\x1b" not in captured.out + captured.err

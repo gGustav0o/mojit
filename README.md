@@ -12,5 +12,7 @@ core is complete; see [the plan](docs/PHASE_1_PLAN.md) and
 [the report](docs/PHASE_1_REPORT.md). Phase 2's configuration and input boundary is
 also complete; see [the plan](docs/PHASE_2_PLAN.md) and
 [the report](docs/PHASE_2_REPORT.md). Experimental code remains isolated under
-`spikes/`. The next implementation boundary is Phase 3: the pure compositor and
-deterministic effects.
+`spikes/`. Phase 3's pure compositor and deterministic effects are complete; see
+[the plan](docs/PHASE_3_PLAN.md) and [the report](docs/PHASE_3_REPORT.md). The next
+boundary is application orchestration: mask caching, scheduling, and the animation
+loop.

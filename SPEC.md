@@ -415,6 +415,14 @@ EFFECTS = {
 }
 ```
 
+Реестр v1 неизменяем и содержит ровно четыре идентификатора: `neon`, `glitch`,
+`chromatic`, `pulse`. Неизвестный идентификатор является ошибкой до загрузки шрифта
+и изменения состояния терминала. `--list-effects` выводит идентификаторы по одному на
+строку в стабильном алфавитном порядке.
+
+`EffectConfig` v1 содержит только signed 64-bit `seed`. Настройки визуального стиля
+эффектов не являются пользовательской конфигурацией v1.
+
 Не использовать inheritance-based hierarchy без необходимости.
 
 Эффекты не должны:
@@ -422,6 +430,17 @@ EFFECTS = {
 - обращаться к терминалу;
 - rasterize текст;
 - использовать глобальное mutable state.
+
+Визуальная семантика v1:
+
+- `neon` — cyan/blue Gaussian glow с детерминированным breathing;
+- `pulse` — центрированное периодическое масштабирование без накопления transform;
+- `chromatic` — симметричное смещение RGB channels;
+- `glitch` — воспроизводимое горизонтальное смещение полос и разделение channels.
+
+Непрерывная анимация определяется только `RenderContext.elapsed_seconds`. Stochastic
+вариация `glitch` определяется только `seed`, фиксированным effect identifier и
+`frame_index`.
 
 ---
 
@@ -473,6 +492,23 @@ warp
 Эффекты компонуются из этих операций.
 
 Нельзя независимо реализовывать одинаковые blending/transformation primitives внутри отдельных эффектов.
+
+Растровый контракт v1:
+
+```text
+storage:       straight-alpha uint8 sRGB
+canvas:        полный viewport
+outside:       transparent black
+translation:   integer pixels, clipping without wrap-around
+scale origin:  viewport center
+scale filter:  Pillow LANCZOS
+blur:          Pillow GaussianBlur
+composition:   standard source-over
+```
+
+Публичные compositor operations не изменяют входные `TextMask`/`Frame` и возвращают
+новые immutable full-viewport модели. `warp` v1 ограничен горизонтальным смещением
+валидированных полос, необходимым эффекту `glitch`; generic affine API не требуется.
 
 ---
 

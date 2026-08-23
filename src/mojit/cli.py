@@ -21,6 +21,7 @@ from mojit.config.resolve import resolve_config
 from mojit.config.toml import ConfigSyntaxError, parse_toml_config
 from mojit.core.models import Orientation
 from mojit.core.typography import ShapingUnavailableError, require_shaping_capability
+from mojit.effects.registry import UnknownEffectError, effect_names, get_effect
 
 
 class CliUsageError(ValueError):
@@ -142,6 +143,7 @@ def prepare_run(
         config_dir=config_dir,
         debug=parsed.debug,
     )
+    get_effect(config.effect)
     text = resolve_input_text(parsed.text, stdin)
     font = load_font_resource(config.font)
     require_shaping_capability()
@@ -167,6 +169,7 @@ _USER_ERRORS = (
     InputTextError,
     FontResourceError,
     ShapingUnavailableError,
+    UnknownEffectError,
 )
 
 
@@ -182,8 +185,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         parsed = parse_cli(sys.argv[1:] if argv is None else argv)
         if parsed.mode is CommandMode.LIST_EFFECTS:
-            print("mojit: effect listing is not implemented yet", file=sys.stderr)
-            return 1
+            print(*effect_names(), sep="\n")
+            return 0
         if parsed.text is None:
             _configure_piped_stdin(sys.stdin)
         prepare_run(parsed, stdin=sys.stdin, environ=os.environ, cwd=Path.cwd().resolve())
