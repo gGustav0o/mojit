@@ -13,6 +13,7 @@ core is complete; see [the plan](docs/PHASE_1_PLAN.md) and
 also complete; see [the plan](docs/PHASE_2_PLAN.md) and
 [the report](docs/PHASE_2_REPORT.md). Experimental code remains isolated under
 `spikes/`. Phase 3's pure compositor and deterministic effects are complete; see
-[the plan](docs/PHASE_3_PLAN.md) and [the report](docs/PHASE_3_REPORT.md). The next
-boundary is application orchestration: mask caching, scheduling, and the animation
-loop.
+[the plan](docs/PHASE_3_PLAN.md) and [the report](docs/PHASE_3_REPORT.md). Phase 4's
+bounded application orchestration is complete; see [the plan](docs/PHASE_4_PLAN.md)
+and [the report](docs/PHASE_4_REPORT.md). The next boundary is the production WezTerm
+transport and terminal lifecycle.

@@ -65,6 +65,25 @@ Phase 0 adapter decisions are recorded in [ADRs](adr/README.md). The WezTerm ada
 owns Kitty protocol encoding, terminal state, and CLI-socket viewport queries. The
 application owns polling cadence, caching, and frame scheduling.
 
+Application orchestration depends on two structural ports: `AnimationBackend`
+provides viewport samples and accepts complete frames, while `MonotonicClock`
+provides time and sleeping. Concrete adapters satisfy these protocols without
+inheriting from application classes. The application-facing backend port deliberately
+does not expose terminal restoration; the Phase 5 composition root will own the
+production backend lifecycle and call idempotent restore in `finally`.
+
+`TextMaskCache` is application-owned and retains only the active
+`TypographyKey -> TextMask` pair. Replacement is committed only after successful
+rasterization and viewport-dimension validation. This bounds memory across resize
+sequences without adding an LRU policy that one active run does not need.
+
+`FixedStepScheduler` is immutable arithmetic over explicit timestamps. The runtime
+uses absolute deadlines, drops missed frame indices, polls viewport on an independent
+250 ms cadence, and constructs effect elapsed time only as `frame_index / fps`.
+`RenderSession` is the pure composition boundary from `PreparedRun`, `Viewport`, and
+frame index to `Frame`; the synchronous loop alone reads the clock, polls, sleeps, and
+presents. Neither object retains frame history.
+
 No plugin system, abstract factory, dependency-injection container, or generic
 cross-terminal hierarchy is planned for v1. One structural terminal contract may be
 introduced when the application runtime needs a fake backend in tests.

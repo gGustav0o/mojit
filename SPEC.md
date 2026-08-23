@@ -391,6 +391,13 @@ Typography остаётся чистой.
 
 Mutable cache принадлежит orchestration/application layer, а не typography или effect implementation.
 
+В пределах одного запуска application хранит ровно одну пару
+`TypographyKey -> TextMask`. Новый key атомарно заменяет предыдущую пару только после
+успешной rasterization и проверки размеров маски. Ошибка создания не удаляет
+последнюю валидную запись. Такой cache ограничивает память при многократном resize;
+возврат к ранее использованному viewport после промежуточного размера выполняет
+повторную rasterization.
+
 ---
 
 ## 12. Effects
@@ -527,10 +534,13 @@ Backend v1 отвечает за:
 Минимальная семантика:
 
 ```python
-get_viewport() -> Viewport
+get_viewport() -> Viewport | None
 present(frame: Frame) -> None
 restore() -> None
 ```
+
+`None` является только runtime-сигналом кратковременной ошибки измерения. До начала
+animation первый вызов обязан вернуть валидный `Viewport`.
 
 Конкретный graphics protocol для WezTerm должен быть выбран один для v1 и локализован внутри backend.
 
@@ -588,6 +598,27 @@ animation continues
 Текст не rasterize'ится на каждом кадре.
 
 FPS задаёт целевую частоту кадров, но rendering core не занимается ожиданием или синхронизацией времени.
+
+Fixed-step scheduling v1:
+
+```text
+first frame index:       0
+frame deadline(n):       started_at + n / fps
+elapsed_seconds(n):      n / fps
+late work:               пропустить просроченные indices без catch-up burst
+viewport polling:        каждые 0.25 s независимо от FPS
+simultaneous deadlines:  сначала viewport poll, затем frame
+```
+
+`started_at` читается из monotonic clock после получения первого viewport. Deadlines
+вычисляются от абсолютного `started_at`, а не накоплением периода. Если rendering или
+presentation заняли несколько периодов, следующий вызов effect получает последний
+уже наступивший frame index; промежуточные кадры не рендерятся.
+
+Viewport polling и frame presentation объединены одним синхронным application loop,
+но имеют независимые deadlines. После задержки выполняется не более одного poll, а
+следующий deadline переносится на первую будущую границу 250 ms. При одновременной
+готовности resize проверяется до построения кадра.
 
 Default — 30 FPS. Более высокие значения, включая `--fps 60`, являются best-effort
 целями и не гарантируются для больших или high-entropy кадров. Scheduling принадлежит

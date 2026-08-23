@@ -8,10 +8,13 @@ SOURCE_ROOT = PROJECT_ROOT / "src" / "mojit"
 CORE_ROOT = SOURCE_ROOT / "core"
 CONFIG_ROOT = SOURCE_ROOT / "config"
 APPLICATION_REQUEST = SOURCE_ROOT / "application" / "request.py"
+APPLICATION_ROOT = SOURCE_ROOT / "application"
 EFFECTS_ROOT = SOURCE_ROOT / "effects"
 FORBIDDEN_CORE_PREFIXES = ("mojit.application", "mojit.adapters", "mojit.config", "mojit.cli")
 FORBIDDEN_CONFIG_PREFIXES = ("mojit.application", "mojit.adapters", "mojit.effects", "mojit.cli")
 FORBIDDEN_REQUEST_PREFIXES = ("mojit.adapters", "mojit.config", "mojit.cli")
+FORBIDDEN_APPLICATION_PREFIXES = ("mojit.adapters", "mojit.config", "mojit.cli")
+FORBIDDEN_APPLICATION_MODULES = {"os", "pathlib", "subprocess", "time"}
 FORBIDDEN_EFFECT_PREFIXES = (
     "mojit.application",
     "mojit.adapters",
@@ -68,6 +71,20 @@ def test_prepared_request_has_no_shell_dependencies() -> None:
         for imported in _imports(APPLICATION_REQUEST)
         if imported.startswith(FORBIDDEN_REQUEST_PREFIXES)
     ]
+    assert violations == []
+
+
+def test_application_depends_only_on_core_effects_and_stdlib_without_shell_io() -> None:
+    violations: list[str] = []
+    for path in APPLICATION_ROOT.rglob("*.py"):
+        for imported in _imports(path):
+            top_level = imported.split(".")[0]
+            if (
+                imported.startswith(FORBIDDEN_APPLICATION_PREFIXES)
+                or top_level in FORBIDDEN_APPLICATION_MODULES
+            ):
+                violations.append(f"{path.relative_to(PROJECT_ROOT)} -> {imported}")
+
     assert violations == []
 
 
