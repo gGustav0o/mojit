@@ -27,24 +27,62 @@ reproducible Windows distribution is also complete; see
   there);
 - a CJK font. The v1 default is `C:/Windows/Fonts/YuGothB.ttc`.
 
-## Install from the local release candidate
+## Install for the current Windows user
+
+Build the release candidate when working from the source checkout, then extract its
+offline bundle:
 
 ```powershell
-Expand-Archive .\dist\release\mojit-1.0.0-windows-x64-wheelhouse.zip .\wheelhouse
-py -3.13 -m venv .venv-mojit
-.\.venv-mojit\Scripts\python.exe -m pip install --no-index --find-links .\wheelhouse mojit==1.0.0
-.\.venv-mojit\Scripts\mojit.exe --list-effects
+.\tools\release\build_artifacts.ps1
+Expand-Archive .\dist\release\mojit-1.0.0-windows-x64-wheelhouse.zip .\mojit-wheelhouse
 ```
 
-Use the same install command with `--upgrade` to reinstall. Uninstall with:
+Verify the ZIP against `dist/release/SHA256SUMS.txt`:
 
 ```powershell
-.\.venv-mojit\Scripts\python.exe -m pip uninstall mojit
+$archive = Resolve-Path .\dist\release\mojit-1.0.0-windows-x64-wheelhouse.zip
+$expected = (Select-String -LiteralPath .\dist\release\SHA256SUMS.txt -Pattern "  $([IO.Path]::GetFileName($archive))$").Line.Split(" ")[0]
+$actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw "Release archive checksum mismatch" }
 ```
 
-Verify release-file hashes against `dist/release/SHA256SUMS.txt` before installation.
-The wheel is Windows x64 only and loads its packaged FriBiDi by absolute path; it does
-not scan or modify `PATH`.
+If the bundle was downloaded, unblock the verified installer, then run it without
+administrator privileges:
+
+```powershell
+Unblock-File .\mojit-wheelhouse\install.ps1
+& .\mojit-wheelhouse\install.ps1
+```
+
+The installer selects the newest 64-bit CPython 3.11-3.14 known to the Windows Python
+launcher, falling back to `python.exe` on `PATH`. It creates an isolated environment
+under `%LOCALAPPDATA%\Programs\mojit`, installs only from the verified wheelhouse,
+and adds its `Scripts` directory to the current user's `PATH`. Restart WezTerm once
+after the first installation. `mojit` can then be called from any directory:
+
+```powershell
+mojit --list-effects
+mojit "電脳世界"
+```
+
+If neither automatic source resolves to a supported interpreter, provide one
+explicitly:
+
+```powershell
+& .\mojit-wheelhouse\install.ps1 -Python C:\Path\To\Python313\python.exe
+```
+
+Run the same installer again to upgrade or repair the installation. Uninstall using
+the protected copy stored with the application:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\mojit\install.ps1" -Uninstall
+```
+
+The installer changes only the current user's `PATH`; it never modifies the machine
+`PATH` or requires elevation. The application wheel remains Windows x64 only and
+loads its packaged FriBiDi by absolute path; the runtime itself never scans or
+modifies `PATH`.
 
 Run from an interactive WezTerm pane:
 

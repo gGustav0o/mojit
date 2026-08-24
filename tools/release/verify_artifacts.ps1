@@ -11,6 +11,7 @@ $uv = Join-Path (Split-Path $pythonPath) "uv.exe"
 $distRoot = Join-Path $projectRoot "dist\release"
 $wheelhouse = Join-Path $distRoot "wheelhouse"
 $wheel = Join-Path $distRoot "mojit-1.0.0-py3-none-win_amd64.whl"
+$bundle = Join-Path $distRoot "mojit-1.0.0-windows-x64-wheelhouse.zip"
 $sums = Join-Path $distRoot "SHA256SUMS.txt"
 
 foreach ($line in Get-Content -LiteralPath $sums) {
@@ -21,6 +22,8 @@ foreach ($line in Get-Content -LiteralPath $sums) {
 }
 & $pythonPath (Join-Path $PSScriptRoot "artifact_contract.py") --wheel $wheel
 if ($LASTEXITCODE -ne 0) { throw "Wheel contract failed" }
+& $pythonPath (Join-Path $PSScriptRoot "artifact_contract.py") --bundle $bundle
+if ($LASTEXITCODE -ne 0) { throw "Wheelhouse bundle contract failed" }
 
 $pythonInstallRoot = Join-Path $projectRoot "build\release-pythons"
 $matrixRoot = Join-Path $projectRoot "build\release-matrix"
@@ -95,4 +98,42 @@ foreach ($version in @("3.11", "3.12", "3.13", "3.14")) {
 }
 
 $evidence | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $distRoot "PYTHON_MATRIX.json") -Encoding utf8
-Write-Host "Artifact verification and CPython 3.11-3.14 matrix passed"
+
+$installer = Join-Path $wheelhouse "install.ps1"
+$installerRoot = Join-Path $projectRoot "build\release-installer"
+$installerRootFull = [IO.Path]::GetFullPath($installerRoot)
+$buildRootFull = [IO.Path]::GetFullPath((Join-Path $projectRoot "build"))
+if (-not $installerRootFull.StartsWith($buildRootFull + [IO.Path]::DirectorySeparatorChar)) {
+    throw "Refusing to use unexpected installer verification path: $installerRootFull"
+}
+if (Test-Path -LiteralPath $installerRoot) {
+    $oldMarker = Join-Path $installerRoot ".mojit-install.json"
+    if (-not (Test-Path -LiteralPath $oldMarker -PathType Leaf)) {
+        throw "Refusing to remove unowned installer verification path: $installerRoot"
+    }
+    & $installer -Uninstall -InstallRoot $installerRoot -PathScope None
+    if ($LASTEXITCODE -ne 0) { throw "Prior installer verification cleanup failed" }
+}
+$installerPython = (& $uv python find --managed-python --no-python-downloads 3.13).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $installerPython) {
+    throw "CPython 3.13 is unavailable for installer verification"
+}
+Push-Location $matrixRoot
+try {
+    & $installer -Python $installerPython -Wheelhouse $wheelhouse -InstallRoot $installerRoot -PathScope Process
+    if ($LASTEXITCODE -ne 0) { throw "User installer verification failed" }
+    & $installer -Wheelhouse $wheelhouse -InstallRoot $installerRoot -PathScope Process
+    if ($LASTEXITCODE -ne 0) { throw "User installer upgrade verification failed" }
+    $installedCommand = Join-Path $installerRoot "Scripts\mojit.exe"
+    $installedEffects = (& $installedCommand --list-effects) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or $installedEffects -notmatch "neon") {
+        throw "Installed global command smoke failed outside its installation directory"
+    }
+    & (Join-Path $installerRoot "install.ps1") -Uninstall -PathScope None
+    if ($LASTEXITCODE -ne 0 -or (Test-Path -LiteralPath $installerRoot)) {
+        throw "User uninstaller verification failed"
+    }
+} finally {
+    Pop-Location
+}
+Write-Host "Artifact, CPython 3.11-3.14, and user installer verification passed"

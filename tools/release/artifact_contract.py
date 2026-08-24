@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 WHEEL_NAME = re.compile(r"^mojit-1\.0\.0-py3-none-win_amd64\.whl$")
+BUNDLE_NAME = re.compile(r"^mojit-1\.0\.0-windows-x64-wheelhouse\.zip$")
 DIST_INFO = "mojit-1.0.0.dist-info"
 EXPECTED_DLL_SHA256 = "4283ba30461395fdf46399b2665176e6f41d11bc7bf6977188120152fde31fd2"
 REQUIRED_SUFFIXES = {
@@ -26,6 +27,20 @@ REQUIRED_SUFFIXES = {
     f"{DIST_INFO}/RECORD",
     f"{DIST_INFO}/licenses/LICENSE",
     f"{DIST_INFO}/licenses/THIRD_PARTY_NOTICES.md",
+}
+BUNDLE_MEMBERS = {
+    "WHEELHOUSE_SHA256SUMS.txt",
+    "budoux-0.9.0-py3-none-any.whl",
+    "install.ps1",
+    "mojit-1.0.0-py3-none-win_amd64.whl",
+    "numpy-2.4.6-cp311-cp311-win_amd64.whl",
+    "numpy-2.4.6-cp312-cp312-win_amd64.whl",
+    "numpy-2.4.6-cp313-cp313-win_amd64.whl",
+    "numpy-2.4.6-cp314-cp314-win_amd64.whl",
+    "pillow-12.3.0-cp311-cp311-win_amd64.whl",
+    "pillow-12.3.0-cp312-cp312-win_amd64.whl",
+    "pillow-12.3.0-cp313-cp313-win_amd64.whl",
+    "pillow-12.3.0-cp314-cp314-win_amd64.whl",
 }
 
 
@@ -122,19 +137,54 @@ def create_deterministic_zip(source: Path, target: Path) -> None:
             archive.writestr(info, path.read_bytes(), compresslevel=9)
 
 
+def inspect_bundle(path: Path) -> dict[str, object]:
+    if not BUNDLE_NAME.fullmatch(path.name):
+        raise ArtifactContractError(f"wrong bundle filename: {path.name}")
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        if len(names) != len(set(names)):
+            raise ArtifactContractError("bundle contains duplicate members")
+        if set(names) != BUNDLE_MEMBERS:
+            missing = sorted(BUNDLE_MEMBERS - set(names))
+            unexpected = sorted(set(names) - BUNDLE_MEMBERS)
+            raise ArtifactContractError(
+                f"bundle inventory mismatch; missing={missing}, unexpected={unexpected}"
+            )
+
+        manifest_rows: dict[str, str] = {}
+        manifest = archive.read("WHEELHOUSE_SHA256SUMS.txt").decode("ascii")
+        for line in manifest.splitlines():
+            match = re.fullmatch(r"([0-9a-f]{64})  ([^\\/]+)", line)
+            if match is None or match.group(2) in manifest_rows:
+                raise ArtifactContractError(f"malformed wheelhouse checksum line: {line!r}")
+            manifest_rows[match.group(2)] = match.group(1)
+        expected_rows = BUNDLE_MEMBERS - {"WHEELHOUSE_SHA256SUMS.txt"}
+        if set(manifest_rows) != expected_rows:
+            raise ArtifactContractError("wheelhouse checksum inventory mismatch")
+        for name, expected in manifest_rows.items():
+            if hashlib.sha256(archive.read(name)).hexdigest() != expected:
+                raise ArtifactContractError(f"wheelhouse checksum mismatch: {name}")
+
+    return {"bundle": path.name, "members": len(names)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--wheel", type=Path)
+    parser.add_argument("--bundle", type=Path)
     parser.add_argument("--zip-source", type=Path)
     parser.add_argument("--zip-target", type=Path)
     arguments = parser.parse_args()
     if arguments.wheel is not None:
         print(json.dumps(inspect_wheel(arguments.wheel), sort_keys=True))
         return 0
+    if arguments.bundle is not None:
+        print(json.dumps(inspect_bundle(arguments.bundle), sort_keys=True))
+        return 0
     if arguments.zip_source is not None and arguments.zip_target is not None:
         create_deterministic_zip(arguments.zip_source, arguments.zip_target)
         return 0
-    parser.error("provide --wheel or both --zip-source and --zip-target")
+    parser.error("provide --wheel, --bundle, or both --zip-source and --zip-target")
     return 2
 
 

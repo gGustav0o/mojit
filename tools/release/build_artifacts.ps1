@@ -34,8 +34,19 @@ foreach ($minor in @("311", "312", "313", "314")) {
     if ($LASTEXITCODE -ne 0) { throw "Dependency download failed for CPython $minor" }
 }
 
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install.ps1") -Destination $wheelhouse
+$wheelhouseFiles = Get-ChildItem -LiteralPath $wheelhouse -File | Sort-Object Name
+$wheelhouseHashes = foreach ($file in $wheelhouseFiles) {
+    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
+    "$hash  $($file.Name)"
+}
+Set-Content -LiteralPath (Join-Path $wheelhouse "WHEELHOUSE_SHA256SUMS.txt") -Value $wheelhouseHashes -Encoding ascii
+
 $bundle = Join-Path $distRoot "mojit-1.0.0-windows-x64-wheelhouse.zip"
 & $pythonPath (Join-Path $PSScriptRoot "artifact_contract.py") --zip-source $wheelhouse --zip-target $bundle
+if ($LASTEXITCODE -ne 0) { throw "Wheelhouse bundle creation failed" }
+& $pythonPath (Join-Path $PSScriptRoot "artifact_contract.py") --bundle $bundle
+if ($LASTEXITCODE -ne 0) { throw "Wheelhouse bundle contract failed" }
 Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "vendor\fribidi\source\fribidi-1.0.16.tar.xz") -Destination $distRoot
 

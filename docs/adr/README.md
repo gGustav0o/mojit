@@ -21,6 +21,7 @@ Accepted records:
 - [0003 — Vertical shaping distribution](0003-vertical-shaping-distribution.md)
 - [0004 — Default CJK font](0004-default-cjk-font.md)
 - [0005 — Cell transport and target FPS](0005-cell-transport-and-fps.md)
+- [0006 — Current-user installation](0006-current-user-installation.md)
 
 Superseded records:
 

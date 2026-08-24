@@ -125,6 +125,16 @@ scans or mutates `PATH`, downloads code, or leaks packaging concerns into core,
 effects, application, or terminal adapters. The wheel is therefore explicitly tagged
 `py3-none-win_amd64`.
 
+Current-user installation is a separate release-shell boundary. The offline bundle contains
+one PowerShell manager and a checksum manifest covering the manager and every wheel.
+It verifies that closed inventory before creating an isolated environment under the
+current user's local application directory. Only that environment's `Scripts`
+directory is prepended to the user `PATH`; the machine `PATH`, system Python, and
+runtime DLL search contract remain untouched. An ownership marker gates upgrades and
+recursive uninstall, so the manager refuses to remove an arbitrary directory. The
+same script owns install, repair, PATH registration, smoke verification, and uninstall
+to keep those lifecycle rules single-sourced.
+
 No plugin system, abstract factory, dependency-injection container, or generic
 cross-terminal hierarchy is planned for v1. One structural terminal contract may be
 introduced when the application runtime needs a fake backend in tests.
