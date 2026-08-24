@@ -14,7 +14,6 @@ import pytest
 from mojit.adapters.clock import SystemMonotonicClock
 from mojit.adapters.font_resource import load_font_resource
 from mojit.adapters.wezterm.backend import WezTermBackend
-from mojit.adapters.wezterm.kitty_protocol import make_image_id
 from mojit.adapters.wezterm.viewport import parse_pane_id, query_pane_geometry
 from mojit.application.request import PreparedRun
 from mojit.application.runtime import AnimationResult, run_animation
@@ -99,7 +98,6 @@ def _backend() -> tuple[WezTermBackend, LiveOutput]:
     backend = WezTermBackend(
         pane_id=pane_id,
         output=output,  # type: ignore[arg-type]
-        image_id=make_image_id(os.getpid()),
         query_geometry=partial(query_pane_geometry),
     )
     return backend, output
