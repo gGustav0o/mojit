@@ -17,7 +17,12 @@ decision derived from them.
 
 Accepted records:
 
-- [0001 — WezTerm graphics protocol](0001-terminal-graphics-protocol.md)
 - [0002 — Pixel viewport measurement](0002-pixel-viewport-measurement.md)
 - [0003 — Vertical shaping distribution](0003-vertical-shaping-distribution.md)
 - [0004 — Default CJK font](0004-default-cjk-font.md)
+- [0005 — Cell transport and target FPS](0005-cell-transport-and-fps.md)
+
+Superseded records:
+
+- [0001 — WezTerm graphics protocol](0001-terminal-graphics-protocol.md), superseded
+  by ADR 0005.

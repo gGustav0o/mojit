@@ -20,7 +20,13 @@ from mojit.adapters.wezterm.errors import WezTermPreflightError
 from mojit.application.input_text import InputTextError, resolve_input_text
 from mojit.application.request import PreparedRun
 from mojit.application.runtime import run_animation
-from mojit.config.models import ConfigOverrides, ConfigValidationError
+from mojit.config.models import (
+    DEFAULT_FPS,
+    MAX_FPS,
+    MIN_FPS,
+    ConfigOverrides,
+    ConfigValidationError,
+)
 from mojit.config.resolve import resolve_config
 from mojit.config.toml import ConfigSyntaxError, parse_toml_config
 from mojit.core.models import Orientation
@@ -95,7 +101,12 @@ def _parser() -> argparse.ArgumentParser:
         const=Orientation.HORIZONTAL,
     )
     parser.add_argument("--font")
-    parser.add_argument("--fps", type=int)
+    parser.add_argument(
+        "--fps",
+        type=int,
+        metavar="FPS",
+        help=f"target frame rate, {MIN_FPS}..{MAX_FPS} (default: {DEFAULT_FPS})",
+    )
     parser.add_argument("--margin", type=float)
     parser.add_argument("--seed", type=int)
     parser.add_argument("--config")

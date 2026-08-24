@@ -137,7 +137,7 @@ def test_render_session_reuses_mask_and_builds_exact_deterministic_context(
         raster_calls.append((font_data, key))
         return _mask_for(key)
 
-    session = RenderSession(_request(fps=20), rasterizer=rasterize)
+    session = RenderSession(_request(fps=10), rasterizer=rasterize)
     viewport = Viewport(8, 6)
     first = session.render(viewport, 0)
     second = session.render(viewport, 7)
@@ -152,7 +152,7 @@ def test_render_session_reuses_mask_and_builds_exact_deterministic_context(
     assert key.viewport == viewport
     assert key.margin == 0.08
     assert [call[1].frame_index for call in effect_calls] == [0, 7]
-    assert [call[1].elapsed_seconds for call in effect_calls] == [0.0, 7 / 20]
+    assert [call[1].elapsed_seconds for call in effect_calls] == [0.0, 7 / 10]
     assert effect_calls[0][2] is effect_calls[1][2]
     assert effect_calls[0][2].seed == 17
 

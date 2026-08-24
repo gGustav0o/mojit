@@ -43,7 +43,7 @@ def test_resolution_uses_defaults() -> None:
         ("effect", "pulse", "glitch"),
         ("orientation", Orientation.VERTICAL, Orientation.HORIZONTAL),
         ("font", "file.ttf", "cli.ttf"),
-        ("fps", 20, 60),
+        ("fps", 10, 15),
         ("margin", 0.0, 0.2),
         ("seed", 42, 0),
     ],

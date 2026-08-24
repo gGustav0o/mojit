@@ -17,7 +17,9 @@ from mojit.adapters.wezterm.backend import WezTermBackend
 from mojit.adapters.wezterm.viewport import parse_pane_id, query_pane_geometry
 from mojit.application.request import PreparedRun
 from mojit.application.runtime import AnimationResult, run_animation
+from mojit.config.models import DEFAULT_FPS
 from mojit.core.models import Frame, Orientation, Viewport
+from mojit.core.timing import MAX_FPS
 from mojit.core.typography import require_shaping_capability
 
 pytestmark = pytest.mark.wezterm_live
@@ -77,7 +79,7 @@ class MeasuredBackend:
         self.metrics.latency_max_seconds = max(self.metrics.latency_max_seconds, latency)
 
 
-def _request(orientation: Orientation, *, fps: int = 30) -> PreparedRun:
+def _request(orientation: Orientation, *, fps: int = DEFAULT_FPS) -> PreparedRun:
     font = load_font_resource(FONT_PATH)
     require_shaping_capability()
     return PreparedRun(
@@ -121,10 +123,11 @@ def _run_bounded(
     orientation: Orientation,
     *,
     frames: int,
+    fps: int = DEFAULT_FPS,
     fail_after: int | None = None,
     should_stop: Callable[[], bool] | None = None,
 ) -> tuple[AnimationResult | None, PresentationMetrics, LiveOutput]:
-    request = _request(orientation)
+    request = _request(orientation, fps=fps)
     backend, output = _backend()
     measured = MeasuredBackend(backend, fail_after=fail_after)
     result: AnimationResult | None = None
@@ -144,10 +147,13 @@ def _run_bounded(
 
 
 @pytest.mark.parametrize("orientation", list(Orientation))
-def test_live_cjk_orientation_and_restore(orientation: Orientation) -> None:
-    result, metrics, output = _run_bounded(orientation, frames=12)
+@pytest.mark.parametrize("fps", [DEFAULT_FPS, MAX_FPS])
+def test_live_cjk_orientation_and_restore(orientation: Orientation, fps: int) -> None:
+    result, metrics, output = _run_bounded(orientation, frames=12, fps=fps)
     assert result is not None
     assert result.presented_frames == 12
+    assert result.last_frame_index is not None
+    assert result.last_frame_index + 1 == result.presented_frames + result.skipped_frames
     assert metrics.frames == 12
     assert output.bytes_written > 0
     assert _visible_cursor()
@@ -193,10 +199,10 @@ def _adjust_pane(direction: str) -> None:
 def test_live_structured_soak_with_resize_metrics() -> None:
     duration = float(os.environ.get("MOJIT_LIVE_SOAK_SECONDS", "300"))
     assert duration >= 1.0
+    working_set_before = _wezterm_working_set()
     started = time.perf_counter()
     next_resize_at = started + min(1.0, duration / 4.0)
     resize_attempts = 0
-    working_set_before = _wezterm_working_set()
 
     def stop_or_resize() -> bool:
         nonlocal next_resize_at, resize_attempts
@@ -212,6 +218,7 @@ def test_live_structured_soak_with_resize_metrics() -> None:
         frames=0,
         should_stop=stop_or_resize,
     )
+    elapsed = time.perf_counter() - started
     working_set_after = _wezterm_working_set()
 
     assert result is not None
@@ -220,12 +227,21 @@ def test_live_structured_soak_with_resize_metrics() -> None:
     assert resize_attempts == 4
     assert result.viewport_changes >= 2
     assert _visible_cursor()
+    total_frame_opportunities = result.presented_frames + result.skipped_frames
     print(
         "MOJIT_LIVE_METRICS="
         + json.dumps(
             {
-                "duration_seconds": duration,
+                "target_fps": DEFAULT_FPS,
+                "duration_seconds": elapsed,
                 "frames": metrics.frames,
+                "achieved_fps": metrics.frames / elapsed,
+                "skipped_frames": result.skipped_frames,
+                "skipped_frame_ratio": (
+                    result.skipped_frames / total_frame_opportunities
+                    if total_frame_opportunities
+                    else 0.0
+                ),
                 "average_present_ms": (metrics.latency_sum_seconds / metrics.frames * 1_000.0),
                 "maximum_present_ms": metrics.latency_max_seconds * 1_000.0,
                 "terminal_bytes": output.bytes_written,

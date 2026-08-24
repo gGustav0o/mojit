@@ -10,6 +10,7 @@ from mojit import cli
 from mojit.adapters.config_file import ConfigFileError
 from mojit.adapters.font_resource import FontResource, FontResourceError
 from mojit.application.input_text import InputTextError
+from mojit.config.models import DEFAULT_FPS, MAX_FPS
 from mojit.core.models import Orientation
 from mojit.core.typography import ShapingUnavailableError
 from mojit.effects.registry import UnknownEffectError
@@ -55,7 +56,7 @@ def test_positional_text_with_defaults(tmp_path: Path, fake_preflight: list[Path
     assert request.text == "電脳世界"
     assert request.effect_id == "neon"
     assert request.orientation is Orientation.HORIZONTAL
-    assert request.fps == 30
+    assert request.fps == DEFAULT_FPS
     assert request.margin == 0.08
     assert request.seed == 0
     assert len(fake_preflight) == 1
@@ -74,7 +75,7 @@ def test_explicit_config_and_all_cli_overrides(tmp_path: Path, fake_preflight: l
     config_path = config_dir / "mojit.toml"
     config_path.write_text(
         'effect = "pulse"\norientation = "vertical"\nfont = "file.ttf"\n'
-        "fps = 20\nmargin = 0.2\nseed = 9\n",
+        "fps = 10\nmargin = 0.2\nseed = 9\n",
         encoding="utf-8",
     )
 
@@ -90,7 +91,7 @@ def test_explicit_config_and_all_cli_overrides(tmp_path: Path, fake_preflight: l
                 "--font",
                 "cli.ttf",
                 "--fps",
-                "60",
+                str(MAX_FPS),
                 "--margin",
                 "0",
                 "--seed",
@@ -106,7 +107,12 @@ def test_explicit_config_and_all_cli_overrides(tmp_path: Path, fake_preflight: l
     assert request.effect_id == "glitch"
     assert request.orientation is Orientation.HORIZONTAL
     assert fake_preflight[-1] == tmp_path / "cli.ttf"
-    assert (request.fps, request.margin, request.seed, request.debug) == (60, 0.0, 0, True)
+    assert (request.fps, request.margin, request.seed, request.debug) == (
+        MAX_FPS,
+        0.0,
+        0,
+        True,
+    )
 
 
 def test_config_relative_font_uses_config_directory(

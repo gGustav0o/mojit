@@ -6,6 +6,8 @@ import math
 from dataclasses import dataclass
 from numbers import Real
 
+from mojit.core.timing import MAX_FPS, MIN_FPS
+
 
 class SchedulerContractError(ValueError):
     """Scheduler construction or method input violates its public contract."""
@@ -38,8 +40,8 @@ class FixedStepScheduler:
     def __post_init__(self) -> None:
         if isinstance(self.fps, bool) or not isinstance(self.fps, int):
             raise TypeError("fps must be an integer")
-        if not 1 <= self.fps <= 60:
-            raise SchedulerContractError("fps must be between 1 and 60")
+        if not MIN_FPS <= self.fps <= MAX_FPS:
+            raise SchedulerContractError(f"fps must be between {MIN_FPS} and {MAX_FPS}")
         object.__setattr__(
             self,
             "started_at",

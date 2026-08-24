@@ -81,7 +81,6 @@ def _append_changed_cell(
         output.extend(b" ")
         return foreground, bottom
 
-
     if top == BLACK or bottom == BLACK:
         color = bottom if top == BLACK else top
         if color != foreground:

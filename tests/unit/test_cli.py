@@ -20,7 +20,7 @@ def test_parser_accepts_every_rendering_flag() -> None:
             "--font",
             "font.ttf",
             "--fps",
-            "60",
+            "15",
             "--margin",
             "0.1",
             "--seed",
@@ -38,7 +38,7 @@ def test_parser_accepts_every_rendering_flag() -> None:
     assert parsed.overrides.orientation is Orientation.VERTICAL
     assert parsed.overrides.effect == "glitch"
     assert parsed.overrides.font == "font.ttf"
-    assert parsed.overrides.fps == 60
+    assert parsed.overrides.fps == 15
     assert parsed.overrides.margin == 0.1
     assert parsed.overrides.seed == 42
 
@@ -56,6 +56,7 @@ def test_text_is_optional_for_stdin_resolution() -> None:
     [
         ["--vertical", "--horizontal"],
         ["--fps", "0"],
+        ["--fps", "16"],
         ["--margin", "0.5"],
         ["--seed", str(2**63)],
         ["--effect", "Neon"],
@@ -76,7 +77,7 @@ def test_invalid_cli_is_mapped_to_usage_error(argv: list[str]) -> None:
         ["--effect", "neon"],
         ["--vertical"],
         ["--font", "font.ttf"],
-        ["--fps", "30"],
+        ["--fps", "8"],
         ["--margin", "0.1"],
         ["--seed", "0"],
     ],
@@ -94,7 +95,9 @@ def test_list_mode_allows_debug_only() -> None:
 
 def test_help_is_successful(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--help"]) == 0
-    assert "usage: mojit" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "usage: mojit" in output
+    assert "target frame rate, 1..15 (default: 8)" in output
 
 
 def test_usage_error_has_no_traceback(capsys: pytest.CaptureFixture[str]) -> None:

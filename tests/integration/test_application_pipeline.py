@@ -7,6 +7,7 @@ import pytest
 
 from mojit.application.request import PreparedRun
 from mojit.application.runtime import RenderSession, run_animation
+from mojit.config.models import DEFAULT_FPS
 from mojit.core.models import Frame, Orientation, TextMask, Viewport
 from mojit.core.typography import TypographyKey
 from mojit.effects.registry import effect_names
@@ -20,7 +21,7 @@ def _request(effect_id: str, *, orientation: Orientation = Orientation.HORIZONTA
         orientation=orientation,
         font_data=data,
         font_fingerprint=hashlib.sha256(data).hexdigest(),
-        fps=30,
+        fps=DEFAULT_FPS,
         margin=0.08,
         seed=42,
     )
@@ -108,5 +109,5 @@ def test_runtime_composes_cache_resize_effect_and_presentation() -> None:
     assert result.skipped_frames == 0
     assert result.viewport_changes == 1
     assert rasterized == [Viewport(24, 18), Viewport(28, 20)]
-    assert [(frame.width, frame.height) for frame in backend.frames[:15]] == [(24, 18)] * 15
-    assert [(frame.width, frame.height) for frame in backend.frames[15:]] == [(28, 20)] * 2
+    assert [(frame.width, frame.height) for frame in backend.frames[:4]] == [(24, 18)] * 4
+    assert [(frame.width, frame.height) for frame in backend.frames[4:]] == [(28, 20)] * 13

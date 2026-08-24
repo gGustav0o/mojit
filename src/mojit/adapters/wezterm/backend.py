@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import math
-import time
 from collections.abc import Callable, Mapping
 from functools import partial
-from numbers import Real
 from typing import BinaryIO, Protocol
 
 from mojit.adapters.wezterm.cell_encoder import CellEncoder
@@ -26,7 +23,6 @@ from mojit.adapters.wezterm.viewport import (
 from mojit.core.models import Frame, Viewport
 
 GeometryQuery = Callable[[int], PaneGeometry]
-Sleeper = Callable[[float], None]
 
 
 class FrameEncoder(Protocol):
@@ -44,9 +40,7 @@ class WezTermBackend:
         "_initial_pending",
         "_pane_id",
         "_preflighted",
-        "_presentation_pause",
         "_query_geometry",
-        "_sleep",
         "_terminal",
     )
 
@@ -57,8 +51,6 @@ class WezTermBackend:
         output: BinaryIO,
         query_geometry: GeometryQuery,
         frame_encoder: FrameEncoder | None = None,
-        presentation_pause: float = 0.1,
-        sleeper: Sleeper = time.sleep,
     ) -> None:
         if isinstance(pane_id, bool) or not isinstance(pane_id, int) or pane_id < 0:
             raise TypeError("pane_id must be a non-negative integer")
@@ -66,20 +58,9 @@ class WezTermBackend:
             raise TypeError("query_geometry must be callable")
         if frame_encoder is not None and not callable(frame_encoder):
             raise TypeError("frame_encoder must be callable")
-        if (
-            isinstance(presentation_pause, bool)
-            or not isinstance(presentation_pause, Real)
-            or not math.isfinite(float(presentation_pause))
-            or presentation_pause < 0.0
-        ):
-            raise TypeError("presentation_pause must be a finite non-negative real")
-        if not callable(sleeper):
-            raise TypeError("sleeper must be callable")
         self._pane_id = pane_id
         self._query_geometry = query_geometry
         self._frame_encoder = CellEncoder() if frame_encoder is None else frame_encoder
-        self._presentation_pause = float(presentation_pause)
-        self._sleep = sleeper
         self._terminal = TerminalSession(output)
         self._geometry: PaneGeometry | None = None
         self._preflighted = False
@@ -159,8 +140,6 @@ class WezTermBackend:
             rows=self._geometry.rows,
         )
         self._terminal.present((payload,))
-        if self._presentation_pause:
-            self._sleep(self._presentation_pause)
 
     def restore(self) -> None:
         """Idempotently restore all terminal state owned by this backend."""

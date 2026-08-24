@@ -62,9 +62,9 @@ The CLI now checks an effect identifier against the registry before text/font wo
 stdin, font, shaping, subprocess, or terminal access. `PreparedRun` continues to
 contain an effect identifier rather than a renderer.
 
-Phase 0 adapter decisions are recorded in [ADRs](adr/README.md). The WezTerm adapter
-owns Kitty protocol encoding, terminal state, and CLI-socket viewport queries. The
-application owns polling cadence, caching, and frame scheduling.
+Terminal adapter decisions are recorded in [ADRs](adr/README.md). The WezTerm adapter
+owns truecolor half-block encoding, terminal state, and CLI-socket viewport queries.
+The application owns polling cadence, caching, and frame scheduling.
 
 Application orchestration depends on two structural ports: `AnimationBackend`
 provides viewport samples and accepts complete frames, while `MonotonicClock`
@@ -85,13 +85,21 @@ uses absolute deadlines, drops missed frame indices, polls viewport on an indepe
 frame index to `Frame`; the synchronous loop alone reads the clock, polls, sleeps, and
 presents. Neither object retains frame history.
 
+The public FPS contract is a target presentation and effect-sampling rate from 1
+through 15, with a default of 8. Shared range constants live in `core.timing`;
+configuration and application validate their own boundary-specific inputs against
+that single range. Only the application scheduler owns pacing. When work is late it
+drops frame indices instead of replaying them; terminal backends encode, write, and
+flush a presented frame without adding a second delay.
+
 The production WezTerm adapter is a one-terminal imperative shell. Pure modules own
-pane-JSON parsing, PNG conversion, and Kitty command chunks. `viewport.py` alone runs
-the timeout-bounded WezTerm CLI subprocess; `terminal_state.py` alone writes escape
-bytes; `backend.py` composes both without importing application. The CLI preflights
-the initial pane geometry before mutation, then enters terminal state, invokes the
-Phase 4 loop, and preserves both runtime and cleanup failures when restoration also
-fails.
+pane-JSON parsing and deterministic cell encoding. `cell_encoder.py` downsamples a
+frame to two truecolor samples per cell and emits only quantized cells changed since
+the previous frame. `viewport.py` alone runs the timeout-bounded WezTerm CLI
+subprocess; `terminal_state.py` alone writes synchronized escape bytes; `backend.py`
+composes them without importing application. The CLI preflights the initial pane
+geometry before mutation, then enters terminal state, invokes the Phase 4 loop, and
+preserves both runtime and cleanup failures when restoration also fails.
 
 The installed command and `python -m mojit` share one outer bootstrap. Before any
 Pillow or CLI import, `native_runtime.py` enables Windows default/user DLL search,

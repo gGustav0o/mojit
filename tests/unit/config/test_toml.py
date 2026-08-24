@@ -10,14 +10,14 @@ from mojit.core.models import Orientation
 def test_parse_complete_document() -> None:
     parsed = parse_toml_config(
         'effect = "glitch"\norientation = "vertical"\nfont = "font.ttf"\n'
-        "fps = 60\nmargin = 0.1\nseed = 0\n"
+        "fps = 15\nmargin = 0.1\nseed = 0\n"
     )
 
     assert parsed == ConfigOverrides(
         effect="glitch",
         orientation=Orientation.VERTICAL,
         font="font.ttf",
-        fps=60,
+        fps=15,
         margin=0.1,
         seed=0,
     )
@@ -33,7 +33,7 @@ def test_parse_maps_syntax_and_encoding_errors(document: str | bytes) -> None:
         parse_toml_config(document)
 
 
-@pytest.mark.parametrize("document", ["unknown = 1", "[render]\nfps = 30", "debug = true"])
+@pytest.mark.parametrize("document", ["unknown = 1", "[render]\nfps = 8", "debug = true"])
 def test_parse_rejects_unknown_and_nested_keys(document: str) -> None:
     with pytest.raises(ConfigValidationError, match="unknown"):
         parse_toml_config(document)
@@ -43,7 +43,7 @@ def test_parse_rejects_unknown_and_nested_keys(document: str) -> None:
     "document",
     [
         "fps = true",
-        'fps = "30"',
+        'fps = "8"',
         "seed = 1.0",
         "margin = true",
         "font = 42",

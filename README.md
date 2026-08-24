@@ -50,10 +50,15 @@ Run from an interactive WezTerm pane:
 ```powershell
 mojit "電脳世界"
 mojit "電脳世界" --vertical --effect glitch
+mojit "警告" --fps 15
 ```
 
+`--fps` is a target presentation and effect-sampling rate in the range `1..15`; the
+default is `8`. Late frame indices are skipped rather than replayed, so the achieved
+rate can be lower when rendering or terminal output is expensive.
+
 `Ctrl+C` stops the continuous animation and restores the primary screen, cursor, and
-owned Kitty image. Piped UTF-8 text is supported. Redirecting run-mode stdout is not.
+terminal attributes. Piped UTF-8 text is supported. Redirecting run-mode stdout is not.
 
 If the process is hard-terminated or terminal output is already broken, cleanup bytes
 cannot be delivered. Close the affected pane to recover its terminal state.

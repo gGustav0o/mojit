@@ -45,7 +45,7 @@ def test_long_running_state_remains_bounded_across_frames_and_resizes() -> None:
         orientation=Orientation.HORIZONTAL,
         font_data=font_data,
         font_fingerprint=hashlib.sha256(font_data).hexdigest(),
-        fps=60,
+        fps=15,
         margin=0.08,
         seed=0,
     )

@@ -43,7 +43,6 @@ def test_frame_round_trips_through_cells_and_terminal_lifecycle() -> None:
         pane_id=2,
         output=output,
         query_geometry=lambda pane_id: _geometry(2, 2, columns=2, rows=1),
-        presentation_pause=0.0,
     )
 
     backend.preflight()
@@ -81,7 +80,7 @@ def _request() -> PreparedRun:
         orientation=Orientation.HORIZONTAL,
         font_data=font_data,
         font_fingerprint=hashlib.sha256(font_data).hexdigest(),
-        fps=30,
+        fps=8,
         margin=0.08,
         seed=7,
     )
@@ -111,7 +110,6 @@ def test_runtime_drives_real_wezterm_backend_across_resize() -> None:
         pane_id=2,
         output=output,
         query_geometry=query,
-        presentation_pause=0.0,
     )
     presented = 0
     original_present = backend.present

@@ -34,7 +34,7 @@ def test_implicit_config_is_discovered_and_decoded(tmp_path: Path) -> None:
 
 def test_explicit_relative_config_uses_invocation_directory(tmp_path: Path) -> None:
     path = tmp_path / "settings.toml"
-    path.write_text("fps = 60\n", encoding="utf-8")
+    path.write_text("fps = 15\n", encoding="utf-8")
 
     document = load_config_document("settings.toml", environ={}, cwd=tmp_path)
 

@@ -17,7 +17,7 @@ def _request(**changes: object) -> PreparedRun:
         "orientation": Orientation.HORIZONTAL,
         "font_data": data,
         "font_fingerprint": hashlib.sha256(data).hexdigest(),
-        "fps": 30,
+        "fps": 8,
         "margin": 0.08,
         "seed": 0,
         "debug": False,
@@ -30,7 +30,12 @@ def test_prepared_run_is_frozen_and_normalizes_margin() -> None:
     request = _request(margin=0)
     assert request.margin == 0.0
     with pytest.raises(FrozenInstanceError):
-        request.fps = 60  # type: ignore[misc]
+        request.fps = 15  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("fps", [1, 15])
+def test_prepared_run_accepts_fps_boundaries(fps: int) -> None:
+    assert _request(fps=fps).fps == fps
 
 
 @pytest.mark.parametrize(
@@ -44,6 +49,7 @@ def test_prepared_run_is_frozen_and_normalizes_margin() -> None:
         ("font_data", b""),
         ("font_fingerprint", "0" * 64),
         ("fps", 0),
+        ("fps", 16),
         ("margin", 0.5),
         ("seed", 2**63),
         ("debug", 1),

@@ -100,12 +100,7 @@ class TerminalSession:
         if self._state in {_LifecycleState.NEW, _LifecycleState.RESTORED}:
             return
         self._state = _LifecycleState.DIRTY
-        cleanup = (
-            END_SYNCHRONIZED_UPDATE
-            + RESET_ATTRIBUTES
-            + SHOW_CURSOR
-            + LEAVE_ALTERNATE_SCREEN
-        )
+        cleanup = END_SYNCHRONIZED_UPDATE + RESET_ATTRIBUTES + SHOW_CURSOR + LEAVE_ALTERNATE_SCREEN
         self._write_exact(cleanup)
         self._flush()
         self._state = _LifecycleState.RESTORED

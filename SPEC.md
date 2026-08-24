@@ -28,8 +28,8 @@ Python:   CPython 3.11-3.14 x64
 
 Runtime prerequisites:
 
-- WezTerm exposes Kitty graphics protocol and pane pixel dimensions through
-  `wezterm cli list`;
+- WezTerm supports truecolor cells and synchronized updates and exposes pane pixel
+  and cell dimensions through `wezterm cli list`;
 - the Windows x64 release wheel supplies its own versioned FriBiDi runtime and
   activates it before importing Pillow/Raqm;
 - the selected CJK font is installed or supplied explicitly.
@@ -44,7 +44,7 @@ Rendering core не должен зависеть от WezTerm.
 
 1. корректный визуальный результат;
 2. минимальный объём собственного инфраструктурного кода;
-3. использование Pillow, NumPy, stdlib и terminal graphics protocol;
+3. использование Pillow, NumPy, stdlib и возможностей терминала;
 4. Functional Core / Imperative Shell;
 5. изоляция и декомпозиция;
 6. DRY;
@@ -78,7 +78,7 @@ Rendering core не должен зависеть от WezTerm.
 mojit "電脳世界"
 mojit "警告" -e glitch
 mojit "猫" --vertical
-mojit "攻殻機動隊" --fps 60
+mojit "攻殻機動隊" --fps 15
 mojit "警告" --seed 42
 mojit --list-effects
 ```
@@ -126,7 +126,7 @@ stdin читается только при отсутствии positional argum
 Пределы CLI/config:
 
 ```text
-fps:     1..60
+fps:     1..15
 margin:  0 <= margin < 0.5
 seed:    signed 64-bit integer
 effect:  [a-z][a-z0-9_-]*
@@ -187,7 +187,7 @@ Side effects ограничены:
 - terminal state;
 - resize;
 - clock/frame scheduling;
-- image output;
+- terminal frame output;
 - `Ctrl+C`.
 
 Не вводить интерфейсы и фабрики без фактической необходимости.
@@ -548,12 +548,15 @@ restore() -> None
 `None` является только runtime-сигналом кратковременной ошибки измерения. До начала
 animation первый вызов обязан вернуть валидный `Viewport`.
 
-Конкретный graphics protocol для WezTerm должен быть выбран один для v1 и локализован внутри backend.
+Конкретный способ представления `Frame` в WezTerm должен быть выбран один для v1 и
+локализован внутри backend.
 
-v1 использует прямой Kitty Graphics Protocol с PNG payload. Backend повторно
-использует один принадлежащий процессу image ID, заменяет placement, оборачивает
-present в synchronized update и явно удаляет image при restore. Запуск
-`wezterm imgcat` subprocess на каждом кадре запрещён.
+v1 использует truecolor-ячейки и символы полублока. Backend композитит RGBA-кадр на
+чёрный фон, уменьшает его до двух цветовых samples на terminal cell и кодирует
+верхний/нижний sample как foreground/background. Первый кадр и изменение cell
+geometry очищают и перерисовывают canvas; последующие кадры выводят только серии
+изменившихся квантованных ячеек. Каждый present оборачивается в synchronized update.
+Внешний subprocess или image protocol в frame path не используется.
 
 До первого terminal-control byte production shell обязан завершить preflight:
 
@@ -565,9 +568,9 @@ bounded wezterm cli list находит ровно этот pane
 pixel и cell geometry валидны
 ```
 
-Успешный exact-pane вызов WezTerm CLI является v1 capability proof. Отдельный Kitty
-query с чтением terminal reply не выполняется: stdin может содержать piped text и
-принадлежит только input boundary.
+Успешный exact-pane вызов WezTerm CLI вместе с interactive binary stdout является v1
+preflight. Terminal input не читается: stdin может содержать piped text и принадлежит
+только input boundary.
 
 Viewport получается bounded-вызовом `wezterm cli list --format json` через отдельный
 WezTerm CLI socket с выбором `WEZTERM_PANE`. Polling выполняется независимо от FPS
@@ -621,7 +624,10 @@ animation continues
 
 Текст не rasterize'ится на каждом кадре.
 
-FPS задаёт целевую частоту кадров, но rendering core не занимается ожиданием или синхронизацией времени.
+FPS задаёт целевую частоту presentation и выборки состояния эффекта, но rendering
+core не занимается ожиданием или синхронизацией времени. Допустимый диапазон —
+`1..15`, default — `8`. Фактическая частота может быть ниже целевой, если render,
+resize или terminal output занимают больше одного периода.
 
 Fixed-step scheduling v1:
 
@@ -644,9 +650,10 @@ Viewport polling и frame presentation объединены одним синх�
 следующий deadline переносится на первую будущую границу 250 ms. При одновременной
 готовности resize проверяется до построения кадра.
 
-Default — 30 FPS. Более высокие значения, включая `--fps 60`, являются best-effort
-целями и не гарантируются для больших или high-entropy кадров. Scheduling принадлежит
-imperative shell и не передаёт wall-clock time в deterministic rendering.
+Application scheduler является единственным владельцем pacing. Backend не добавляет
+паузу после presentation. Значения до `--fps 15` являются best-effort целями и не
+гарантируются для больших или дорогих кадров. Scheduling не передаёт wall-clock time
+в deterministic rendering.
 
 ---
 
@@ -700,7 +707,7 @@ Defaults v1:
 effect:       neon
 orientation:  horizontal
 font:         C:/Windows/Fonts/YuGothB.ttc
-fps:          30
+fps:          8
 margin:       0.08
 seed:         0
 debug:        false

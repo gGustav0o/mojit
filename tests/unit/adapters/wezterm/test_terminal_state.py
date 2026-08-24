@@ -41,12 +41,7 @@ class RecordingOutput:
 
 
 def _cleanup() -> bytes:
-    return (
-        END_SYNCHRONIZED_UPDATE
-        + RESET_ATTRIBUTES
-        + SHOW_CURSOR
-        + LEAVE_ALTERNATE_SCREEN
-    )
+    return END_SYNCHRONIZED_UPDATE + RESET_ATTRIBUTES + SHOW_CURSOR + LEAVE_ALTERNATE_SCREEN
 
 
 def test_complete_lifecycle_emits_exact_bytes_and_flushes() -> None:

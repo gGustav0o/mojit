@@ -8,16 +8,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mojit.core.models import Orientation
+from mojit.core.timing import MAX_FPS, MIN_FPS
 
 DEFAULT_EFFECT = "neon"
 DEFAULT_ORIENTATION = Orientation.HORIZONTAL
 DEFAULT_FONT = Path("C:/Windows/Fonts/YuGothB.ttc")
-DEFAULT_FPS = 30
+DEFAULT_FPS = 8
 DEFAULT_MARGIN = 0.08
 DEFAULT_SEED = 0
 
-MIN_FPS = 1
-MAX_FPS = 60
 MIN_SEED = -(2**63)
 MAX_SEED = 2**63 - 1
 

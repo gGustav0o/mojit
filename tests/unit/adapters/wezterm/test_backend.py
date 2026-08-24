@@ -43,7 +43,6 @@ def _backend(
         "pane_id": 2,
         "output": io.BytesIO() if output is None else output,
         "query_geometry": query,
-        "presentation_pause": 0.0,
     }
     if encoder is not None:
         kwargs["frame_encoder"] = encoder
@@ -199,28 +198,6 @@ def test_restore_is_idempotent_and_does_not_close_output() -> None:
     assert output.closed is False
 
 
-def test_presentation_pause_runs_after_the_frame_is_flushed() -> None:
-    output = io.BytesIO()
-    observations: list[tuple[float, bytes]] = []
-    backend = WezTermBackend(
-        pane_id=2,
-        output=output,
-        query_geometry=lambda pane_id: _geometry(),
-        frame_encoder=lambda frame, *, columns, rows: CELL_PAYLOAD,
-        presentation_pause=0.1,
-        sleeper=lambda delay: observations.append((delay, output.getvalue())),
-    )
-
-    backend.preflight()
-    backend.enter()
-    backend.present(_frame())
-    backend.restore()
-
-    assert len(observations) == 1
-    assert observations[0][0] == 0.1
-    assert CELL_PAYLOAD in observations[0][1]
-
-
 def test_from_environment_validates_tty_and_uses_exact_pane() -> None:
     document = (
         b'[{"pane_id":7,"size":{"rows":24,"cols":80,"pixel_width":8,"pixel_height":6,"dpi":96}}]'
@@ -267,9 +244,6 @@ def test_from_environment_rejects_non_terminal_before_pane_query() -> None:
         {"pane_id": -1},
         {"query_geometry": object()},
         {"frame_encoder": object()},
-        {"presentation_pause": -0.1},
-        {"presentation_pause": float("nan")},
-        {"sleeper": object()},
     ],
 )
 def test_constructor_rejects_invalid_collaborators(kwargs: dict[str, object]) -> None:
@@ -277,7 +251,6 @@ def test_constructor_rejects_invalid_collaborators(kwargs: dict[str, object]) ->
         "pane_id": 2,
         "output": io.BytesIO(),
         "query_geometry": lambda pane_id: _geometry(),
-        "presentation_pause": 0.0,
     }
     values.update(kwargs)
     with pytest.raises(TypeError):

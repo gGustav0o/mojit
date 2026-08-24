@@ -74,7 +74,6 @@ def test_transport_state_remains_bounded_across_one_thousand_frames() -> None:
         output=output,  # type: ignore[arg-type]
         query_geometry=query,
         frame_encoder=encode,  # type: ignore[arg-type]
-        presentation_pause=0.0,
     )
     font_data = b"synthetic-font"
     request = PreparedRun(
@@ -83,7 +82,7 @@ def test_transport_state_remains_bounded_across_one_thousand_frames() -> None:
         orientation=Orientation.HORIZONTAL,
         font_data=font_data,
         font_fingerprint=hashlib.sha256(font_data).hexdigest(),
-        fps=60,
+        fps=15,
         margin=0.08,
         seed=0,
     )

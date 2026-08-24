@@ -1,6 +1,6 @@
 # ADR 0001: WezTerm graphics protocol
 
-- Status: Accepted
+- Status: Superseded by [ADR 0005](0005-cell-transport-and-fps.md)
 - Date: 2026-08-23
 
 ## Context

@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass, field
 
 from mojit.core.models import Orientation
+from mojit.core.timing import MAX_FPS, MIN_FPS
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _EFFECT_ID = re.compile(r"[a-z][a-z0-9_-]*\Z")
@@ -48,8 +49,12 @@ class PreparedRun:
             raise ValueError("font_fingerprint must be a lowercase SHA-256 digest")
         if hashlib.sha256(self.font_data).hexdigest() != self.font_fingerprint:
             raise ValueError("font_data does not match font_fingerprint")
-        if isinstance(self.fps, bool) or not isinstance(self.fps, int) or not 1 <= self.fps <= 60:
-            raise ValueError("fps must be an integer between 1 and 60")
+        if (
+            isinstance(self.fps, bool)
+            or not isinstance(self.fps, int)
+            or not MIN_FPS <= self.fps <= MAX_FPS
+        ):
+            raise ValueError(f"fps must be an integer between {MIN_FPS} and {MAX_FPS}")
         if isinstance(self.margin, bool) or not isinstance(self.margin, (int, float)):
             raise TypeError("margin must be a number")
         margin = float(self.margin)

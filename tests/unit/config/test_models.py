@@ -5,16 +5,23 @@ from pathlib import Path
 
 import pytest
 
-from mojit.config.models import ConfigOverrides, ConfigValidationError, ResolvedConfig
+from mojit.config.models import (
+    DEFAULT_FPS,
+    MAX_FPS,
+    MIN_FPS,
+    ConfigOverrides,
+    ConfigValidationError,
+    ResolvedConfig,
+)
 from mojit.core.models import Orientation
 
 
-@pytest.mark.parametrize("fps", [1, 30, 60])
+@pytest.mark.parametrize("fps", [MIN_FPS, DEFAULT_FPS, MAX_FPS])
 def test_overrides_accept_fps_boundaries(fps: int) -> None:
     assert ConfigOverrides(fps=fps).fps == fps
 
 
-@pytest.mark.parametrize("fps", [0, 61, True, 1.5])
+@pytest.mark.parametrize("fps", [MIN_FPS - 1, MAX_FPS + 1, True, 1.5])
 def test_overrides_reject_invalid_fps(fps: object) -> None:
     with pytest.raises(ConfigValidationError):
         ConfigOverrides(fps=fps)  # type: ignore[arg-type]
@@ -64,20 +71,20 @@ def test_models_are_frozen_and_resolved_state_is_complete() -> None:
         effect="neon",
         orientation=Orientation.HORIZONTAL,
         font=Path("C:/font.ttf"),
-        fps=30,
+        fps=DEFAULT_FPS,
         margin=0.08,
         seed=0,
     )
 
     with pytest.raises(FrozenInstanceError):
-        resolved.fps = 60  # type: ignore[misc]
+        resolved.fps = MAX_FPS  # type: ignore[misc]
 
 
 def test_resolved_config_requires_absolute_font_and_boolean_debug() -> None:
     values = {
         "effect": "neon",
         "orientation": Orientation.HORIZONTAL,
-        "fps": 30,
+        "fps": DEFAULT_FPS,
         "margin": 0.08,
         "seed": 0,
     }
