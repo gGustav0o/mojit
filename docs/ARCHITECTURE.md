@@ -35,6 +35,14 @@ content identity. Typography receives no path or open file handle. `TypographyKe
 is both the rendering request and cache identity; it contains only values that can
 change the mask.
 
+Horizontal auto-layout is split across two core boundaries. `text_layout.py` is pure:
+it produces a bounded set of balanced, Unicode-aware line candidates without knowing
+about Pillow, fonts, viewports, or terminal cells. `typography.py` measures those
+candidates with the selected font and chooses the largest fitted size, using the
+original one-line form as the tie winner. Vertical shaping remains a single Raqm
+`direction="ttb"` run. Because the chosen layout is derived entirely from the existing
+`TypographyKey`, no second cache identity or mutable layout state is introduced.
+
 The config-file adapter owns discovery, bounded reads, and UTF-8 decoding. The TOML
 module is pure and accepts only a closed set of root-level keys. Config resolution is
 an explicit field-by-field `CLI > file > defaults` operation with source-relative font

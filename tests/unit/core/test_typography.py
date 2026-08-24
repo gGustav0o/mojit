@@ -51,8 +51,8 @@ def test_features_are_normalized_to_an_immutable_tuple() -> None:
     assert key.features == ("-kern",)
 
 
-@pytest.mark.parametrize("text", ["", " ", "\t\r\n"])
-def test_typography_key_rejects_blank_text(text: str) -> None:
+@pytest.mark.parametrize("text", ["", " ", "\t\r\n", "a\nb", "a\rb", "a\0b"])
+def test_typography_key_rejects_invalid_text(text: str) -> None:
     with pytest.raises(InvalidTextError):
         replace(_key(), text=text)
 

@@ -15,7 +15,7 @@ from mojit.core.typography import TypographyKey, rasterize_text_mask
 REFERENCE_FONT = Path("C:/Windows/Fonts/YuGothB.ttc")
 REFERENCE_FONT_SHA256 = "d923a57f781f06198167da4f58287be7ac64a954a47aff4295e078a42b4b68b2"
 REFERENCE_MASK_SHA256 = {
-    Orientation.HORIZONTAL: "e8ebd18622031f116cf3923a4ad5e61491465a56f4b2576bff145ee307db55d4",
+    Orientation.HORIZONTAL: "3dfa94a9709e8c260c259c78ad2c883758ab3e14d6bf3d079cb894730b0daac8",
     Orientation.VERTICAL: "21e3891463598eda610c46aab678c27b8e6b63f9df37e4e4f2755bc057d56b03",
 }
 
@@ -99,3 +99,33 @@ def test_reference_typography_adapts_to_viewport(orientation: Orientation) -> No
     assert occupied[0] < occupied[1] < occupied[2]
     for mask in masks:
         _assert_ink_inside_margin(mask, 0.08)
+
+
+@pytest.mark.typography_reference
+def test_horizontal_auto_layout_increases_visible_glyph_area(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    viewport = Viewport(640, 384)
+    automatic = _mask("電脳世界", Orientation.HORIZONTAL, viewport)
+    monkeypatch.setattr(
+        "mojit.core.typography.horizontal_line_candidates",
+        lambda text: ((text,),),
+    )
+    single_line = _mask("電脳世界", Orientation.HORIZONTAL, viewport)
+
+    assert np.count_nonzero(automatic.alpha) > np.count_nonzero(single_line.alpha)
+
+
+@pytest.mark.typography_reference
+def test_horizontal_auto_layout_keeps_a_better_single_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    viewport = Viewport(1000, 200)
+    automatic = _mask("電脳世界", Orientation.HORIZONTAL, viewport)
+    monkeypatch.setattr(
+        "mojit.core.typography.horizontal_line_candidates",
+        lambda text: ((text,),),
+    )
+    single_line = _mask("電脳世界", Orientation.HORIZONTAL, viewport)
+
+    assert automatic == single_line
