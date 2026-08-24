@@ -5,13 +5,13 @@ from collections.abc import Iterable
 import pytest
 
 from mojit.adapters.wezterm.errors import TerminalOutputError, TerminalStateError
-from mojit.adapters.wezterm.kitty_protocol import delete_image
 from mojit.adapters.wezterm.terminal_state import (
     BEGIN_SYNCHRONIZED_UPDATE,
     CURSOR_HOME,
     END_SYNCHRONIZED_UPDATE,
     ENTER_TERMINAL,
     LEAVE_ALTERNATE_SCREEN,
+    RESET_ATTRIBUTES,
     SHOW_CURSOR,
     TerminalSession,
 )
@@ -40,13 +40,18 @@ class RecordingOutput:
             raise self.flush_failure
 
 
-def _cleanup(image_id: int) -> bytes:
-    return END_SYNCHRONIZED_UPDATE + delete_image(image_id) + SHOW_CURSOR + LEAVE_ALTERNATE_SCREEN
+def _cleanup() -> bytes:
+    return (
+        END_SYNCHRONIZED_UPDATE
+        + RESET_ATTRIBUTES
+        + SHOW_CURSOR
+        + LEAVE_ALTERNATE_SCREEN
+    )
 
 
 def test_complete_lifecycle_emits_exact_bytes_and_flushes() -> None:
     output = RecordingOutput()
-    session = TerminalSession(output, image_id=17)  # type: ignore[arg-type]
+    session = TerminalSession(output)  # type: ignore[arg-type]
 
     session.enter()
     session.present([b"first", b"second"])
@@ -58,7 +63,7 @@ def test_complete_lifecycle_emits_exact_bytes_and_flushes() -> None:
         + CURSOR_HOME
         + b"firstsecond"
         + END_SYNCHRONIZED_UPDATE
-        + _cleanup(17)
+        + _cleanup()
     )
     assert output.flushes == 3
     assert session.is_active is False
@@ -68,19 +73,19 @@ def test_complete_lifecycle_emits_exact_bytes_and_flushes() -> None:
 
 def test_partial_writes_are_completed_without_data_loss() -> None:
     output = RecordingOutput(max_chunk=2)
-    session = TerminalSession(output, image_id=23)  # type: ignore[arg-type]
+    session = TerminalSession(output)  # type: ignore[arg-type]
 
     session.enter()
     session.present([b"payload"])
     session.restore()
 
     assert bytes(output.data).startswith(ENTER_TERMINAL + BEGIN_SYNCHRONIZED_UPDATE)
-    assert bytes(output.data).endswith(_cleanup(23))
+    assert bytes(output.data).endswith(_cleanup())
 
 
 def test_restore_is_noop_before_entry_and_after_success() -> None:
     output = RecordingOutput()
-    session = TerminalSession(output, image_id=29)  # type: ignore[arg-type]
+    session = TerminalSession(output)  # type: ignore[arg-type]
 
     session.restore()
     assert output.data == b""
@@ -98,7 +103,7 @@ def test_restore_is_noop_before_entry_and_after_success() -> None:
 def test_failed_entry_remains_cleanup_eligible() -> None:
     output = RecordingOutput()
     output.flush_failure = OSError("flush")
-    session = TerminalSession(output, image_id=31)  # type: ignore[arg-type]
+    session = TerminalSession(output)  # type: ignore[arg-type]
 
     with pytest.raises(TerminalOutputError, match="flush"):
         session.enter()
@@ -106,12 +111,12 @@ def test_failed_entry_remains_cleanup_eligible() -> None:
     assert session.cleanup_required is True
     output.flush_failure = None
     session.restore()
-    assert bytes(output.data).endswith(_cleanup(31))
+    assert bytes(output.data).endswith(_cleanup())
 
 
 def test_failed_presentation_remains_cleanup_eligible() -> None:
     output = RecordingOutput()
-    session = TerminalSession(output, image_id=37)  # type: ignore[arg-type]
+    session = TerminalSession(output)  # type: ignore[arg-type]
     session.enter()
 
     def commands() -> Iterable[bytes]:
@@ -123,12 +128,12 @@ def test_failed_presentation_remains_cleanup_eligible() -> None:
 
     assert session.cleanup_required is True
     session.restore()
-    assert bytes(output.data).endswith(_cleanup(37))
+    assert bytes(output.data).endswith(_cleanup())
 
 
 def test_failed_restore_is_retryable() -> None:
     output = RecordingOutput()
-    session = TerminalSession(output, image_id=41)  # type: ignore[arg-type]
+    session = TerminalSession(output)  # type: ignore[arg-type]
     session.enter()
     output.write_failure = OSError("write")
 
@@ -138,7 +143,7 @@ def test_failed_restore_is_retryable() -> None:
     assert session.cleanup_required is True
     output.write_failure = None
     session.restore()
-    assert bytes(output.data).endswith(_cleanup(41))
+    assert bytes(output.data).endswith(_cleanup())
 
 
 class InvalidProgressOutput(RecordingOutput):
@@ -152,7 +157,7 @@ class InvalidProgressOutput(RecordingOutput):
 
 @pytest.mark.parametrize("progress", [None, True, 0, -1, 10_000])
 def test_invalid_write_progress_is_rejected(progress: object) -> None:
-    session = TerminalSession(InvalidProgressOutput(progress), image_id=43)  # type: ignore[arg-type]
+    session = TerminalSession(InvalidProgressOutput(progress))  # type: ignore[arg-type]
     with pytest.raises(TerminalOutputError, match="write progress|write length"):
         session.enter()
     assert session.cleanup_required is True
@@ -160,7 +165,7 @@ def test_invalid_write_progress_is_rejected(progress: object) -> None:
 
 def test_state_machine_rejects_invalid_order_and_commands() -> None:
     output = RecordingOutput()
-    session = TerminalSession(output, image_id=47)  # type: ignore[arg-type]
+    session = TerminalSession(output)  # type: ignore[arg-type]
 
     with pytest.raises(TerminalStateError, match="active"):
         session.present([b"x"])
@@ -179,4 +184,4 @@ def test_state_machine_rejects_invalid_order_and_commands() -> None:
 @pytest.mark.parametrize("output", [object(), None])
 def test_constructor_requires_binary_output_contract(output: object) -> None:
     with pytest.raises(TypeError, match="write and flush"):
-        TerminalSession(output, image_id=1)  # type: ignore[arg-type]
+        TerminalSession(output)  # type: ignore[arg-type]

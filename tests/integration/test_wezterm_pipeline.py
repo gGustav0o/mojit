@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import io
 
 import numpy as np
-from PIL import Image
 
 from mojit.adapters.wezterm.backend import WezTermBackend
-from mojit.adapters.wezterm.kitty_protocol import ESC, ST
-from mojit.adapters.wezterm.terminal_state import ENTER_TERMINAL, LEAVE_ALTERNATE_SCREEN
+from mojit.adapters.wezterm.cell_encoder import RESET_COLORS, UPPER_HALF_BLOCK
+from mojit.adapters.wezterm.terminal_state import (
+    BEGIN_SYNCHRONIZED_UPDATE,
+    ENTER_TERMINAL,
+    LEAVE_ALTERNATE_SCREEN,
+)
 from mojit.adapters.wezterm.viewport import PaneGeometry
 from mojit.application.request import PreparedRun
 from mojit.application.runtime import run_animation
@@ -27,26 +29,7 @@ def _geometry(
     return PaneGeometry(2, Viewport(width, height), columns, rows, 96.0)
 
 
-def _transmit_payload(terminal_bytes: bytes) -> tuple[list[bytes], bytes]:
-    controls: list[bytes] = []
-    chunks: list[bytes] = []
-    offset = 0
-    while True:
-        start = terminal_bytes.find(ESC + b"_G", offset)
-        if start < 0:
-            break
-        end = terminal_bytes.index(ST, start)
-        command = terminal_bytes[start + len(ESC + b"_G") : end]
-        offset = end + len(ST)
-        control, separator, payload = command.partition(b";")
-        if b"a=T" in control:
-            assert separator == b";"
-            controls.append(control)
-            chunks.append(payload)
-    return controls, base64.b64decode(b"".join(chunks), validate=True)
-
-
-def test_frame_round_trips_through_png_kitty_and_terminal_lifecycle() -> None:
+def test_frame_round_trips_through_cells_and_terminal_lifecycle() -> None:
     rgba = np.array(
         [
             [[255, 0, 0, 255], [0, 255, 0, 128]],
@@ -59,8 +42,8 @@ def test_frame_round_trips_through_png_kitty_and_terminal_lifecycle() -> None:
     backend = WezTermBackend(
         pane_id=2,
         output=output,
-        image_id=123,
-        query_geometry=lambda pane_id: _geometry(2, 2, columns=2, rows=2),
+        query_geometry=lambda pane_id: _geometry(2, 2, columns=2, rows=1),
+        presentation_pause=0.0,
     )
 
     backend.preflight()
@@ -70,17 +53,12 @@ def test_frame_round_trips_through_png_kitty_and_terminal_lifecycle() -> None:
     backend.restore()
 
     terminal_bytes = output.getvalue()
-    controls, png = _transmit_payload(terminal_bytes)
-    with Image.open(io.BytesIO(png)) as image:
-        decoded = np.array(image.convert("RGBA"), dtype=np.uint8)
-
-    assert np.array_equal(decoded, rgba)
-    assert len(controls) == 1
-    assert b"i=123" in controls[0]
-    assert b"s=2,v=2,c=2,r=2" in controls[0]
+    assert terminal_bytes.count(UPPER_HALF_BLOCK) == 2
+    assert b"\x1b[38;2;240;0;0;48;2;0;0;64m" in terminal_bytes
+    assert b"\x1b[38;2;0;128;0m\x1b[49m" + UPPER_HALF_BLOCK in terminal_bytes
+    assert RESET_COLORS in terminal_bytes
     assert terminal_bytes.startswith(ENTER_TERMINAL)
     assert terminal_bytes.endswith(LEAVE_ALTERNATE_SCREEN)
-    assert b"a=d,d=I,i=123" in terminal_bytes
     assert output.closed is False
 
 
@@ -132,8 +110,8 @@ def test_runtime_drives_real_wezterm_backend_across_resize() -> None:
     backend = WezTermBackend(
         pane_id=2,
         output=output,
-        image_id=456,
         query_geometry=query,
+        presentation_pause=0.0,
     )
     presented = 0
     original_present = backend.present
@@ -161,6 +139,7 @@ def test_runtime_drives_real_wezterm_backend_across_resize() -> None:
     terminal_bytes = output.getvalue()
     assert result.presented_frames == 17
     assert result.viewport_changes == 1
-    assert terminal_bytes.count(b"a=T") == 17
-    assert b"s=28,v=20,c=90,r=28" in terminal_bytes
+    assert terminal_bytes.count(BEGIN_SYNCHRONIZED_UPDATE) == 17
+    rendered_cells = terminal_bytes.count(UPPER_HALF_BLOCK)
+    assert 0 < rendered_cells < 8 * 80 * 24 + 9 * 90 * 28
     assert terminal_bytes.endswith(LEAVE_ALTERNATE_SCREEN)

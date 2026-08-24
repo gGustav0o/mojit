@@ -5,6 +5,7 @@ import hashlib
 import numpy as np
 
 from mojit.adapters.wezterm.backend import WezTermBackend
+from mojit.adapters.wezterm.cell_encoder import ESC, RESET_COLORS
 from mojit.adapters.wezterm.errors import ViewportQueryError
 from mojit.adapters.wezterm.viewport import PaneGeometry
 from mojit.application.request import PreparedRun
@@ -62,17 +63,18 @@ def test_transport_state_remains_bounded_across_one_thousand_frames() -> None:
             dpi=96.0,
         )
 
-    def encode(frame: object) -> bytes:
+    def encode(frame: object, *, columns: int, rows: int) -> bytes:
         nonlocal encoded_frames
+        del frame, columns, rows
         encoded_frames += 1
-        return b"p" * 5_000
+        return ESC + b"[38;2;" + b"p" * 5_000 + RESET_COLORS
 
     backend = WezTermBackend(
         pane_id=2,
         output=output,  # type: ignore[arg-type]
-        image_id=789,
         query_geometry=query,
-        png_encoder=encode,  # type: ignore[arg-type]
+        frame_encoder=encode,  # type: ignore[arg-type]
+        presentation_pause=0.0,
     )
     font_data = b"synthetic-font"
     request = PreparedRun(
@@ -107,7 +109,7 @@ def test_transport_state_remains_bounded_across_one_thousand_frames() -> None:
     assert encoded_frames == 1_000
     assert query_calls > 60
     assert output.flushes == 1_002
-    assert output.max_write < 4_200
+    assert output.max_write == 5_011
     assert output.total_bytes < 8_000_000
     assert output.total_bytes == restored_bytes
     assert not hasattr(backend, "__dict__")

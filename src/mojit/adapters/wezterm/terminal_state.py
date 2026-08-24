@@ -7,13 +7,13 @@ from enum import Enum, auto
 from typing import BinaryIO
 
 from mojit.adapters.wezterm.errors import TerminalOutputError, TerminalStateError
-from mojit.adapters.wezterm.kitty_protocol import delete_image
 
 ESC = b"\x1b"
 ENTER_TERMINAL = ESC + b"[?1049h" + ESC + b"[2J" + ESC + b"[H" + ESC + b"[?25l"
 BEGIN_SYNCHRONIZED_UPDATE = ESC + b"[?2026h"
 END_SYNCHRONIZED_UPDATE = ESC + b"[?2026l"
 CURSOR_HOME = ESC + b"[H"
+RESET_ATTRIBUTES = ESC + b"[0m"
 SHOW_CURSOR = ESC + b"[?25h"
 LEAVE_ALTERNATE_SCREEN = ESC + b"[?1049l"
 
@@ -28,15 +28,14 @@ class _LifecycleState(Enum):
 class TerminalSession:
     """Own all terminal mutations for one process image."""
 
-    __slots__ = ("_delete_command", "_output", "_state")
+    __slots__ = ("_output", "_state")
 
-    def __init__(self, output: BinaryIO, *, image_id: int) -> None:
+    def __init__(self, output: BinaryIO) -> None:
         if not callable(getattr(output, "write", None)) or not callable(
             getattr(output, "flush", None)
         ):
             raise TypeError("output must provide binary write and flush methods")
         self._output = output
-        self._delete_command = delete_image(image_id)
         self._state = _LifecycleState.NEW
 
     @property
@@ -81,7 +80,7 @@ class TerminalSession:
         self._state = _LifecycleState.ACTIVE
 
     def present(self, commands: Iterable[bytes]) -> None:
-        """Write one synchronized image replacement and flush once."""
+        """Write one synchronized cell replacement and flush once."""
         if self._state is not _LifecycleState.ACTIVE:
             raise TerminalStateError("terminal presentation requires an active session")
         if not isinstance(commands, Iterable):
@@ -102,7 +101,10 @@ class TerminalSession:
             return
         self._state = _LifecycleState.DIRTY
         cleanup = (
-            END_SYNCHRONIZED_UPDATE + self._delete_command + SHOW_CURSOR + LEAVE_ALTERNATE_SCREEN
+            END_SYNCHRONIZED_UPDATE
+            + RESET_ATTRIBUTES
+            + SHOW_CURSOR
+            + LEAVE_ALTERNATE_SCREEN
         )
         self._write_exact(cleanup)
         self._flush()

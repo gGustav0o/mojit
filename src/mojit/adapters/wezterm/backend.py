@@ -1,19 +1,20 @@
-"""Concrete production composition for viewport, PNG, Kitty, and terminal state."""
+"""Concrete production composition for viewport, cells, and terminal state."""
 
 from __future__ import annotations
 
-import os
+import math
+import time
 from collections.abc import Callable, Mapping
 from functools import partial
-from typing import BinaryIO
+from numbers import Real
+from typing import BinaryIO, Protocol
 
+from mojit.adapters.wezterm.cell_encoder import CellEncoder
 from mojit.adapters.wezterm.errors import (
     BackendStateError,
     ViewportQueryError,
     WezTermPreflightError,
 )
-from mojit.adapters.wezterm.kitty_protocol import iter_transmit_png, make_image_id
-from mojit.adapters.wezterm.png_encoder import encode_frame_png
 from mojit.adapters.wezterm.terminal_state import TerminalSession
 from mojit.adapters.wezterm.viewport import (
     PaneGeometry,
@@ -25,20 +26,27 @@ from mojit.adapters.wezterm.viewport import (
 from mojit.core.models import Frame, Viewport
 
 GeometryQuery = Callable[[int], PaneGeometry]
-PngEncoder = Callable[[Frame], bytes]
+Sleeper = Callable[[float], None]
+
+
+class FrameEncoder(Protocol):
+    """Encode a pixel frame for one exact terminal cell geometry."""
+
+    def __call__(self, frame: Frame, *, columns: int, rows: int) -> bytes: ...
 
 
 class WezTermBackend:
     """Implement the Phase 4 backend port without importing application."""
 
     __slots__ = (
+        "_frame_encoder",
         "_geometry",
-        "_image_id",
         "_initial_pending",
         "_pane_id",
-        "_png_encoder",
         "_preflighted",
+        "_presentation_pause",
         "_query_geometry",
+        "_sleep",
         "_terminal",
     )
 
@@ -47,21 +55,32 @@ class WezTermBackend:
         *,
         pane_id: int,
         output: BinaryIO,
-        image_id: int,
         query_geometry: GeometryQuery,
-        png_encoder: PngEncoder = encode_frame_png,
+        frame_encoder: FrameEncoder | None = None,
+        presentation_pause: float = 0.1,
+        sleeper: Sleeper = time.sleep,
     ) -> None:
         if isinstance(pane_id, bool) or not isinstance(pane_id, int) or pane_id < 0:
             raise TypeError("pane_id must be a non-negative integer")
         if not callable(query_geometry):
             raise TypeError("query_geometry must be callable")
-        if not callable(png_encoder):
-            raise TypeError("png_encoder must be callable")
+        if frame_encoder is not None and not callable(frame_encoder):
+            raise TypeError("frame_encoder must be callable")
+        if (
+            isinstance(presentation_pause, bool)
+            or not isinstance(presentation_pause, Real)
+            or not math.isfinite(float(presentation_pause))
+            or presentation_pause < 0.0
+        ):
+            raise TypeError("presentation_pause must be a finite non-negative real")
+        if not callable(sleeper):
+            raise TypeError("sleeper must be callable")
         self._pane_id = pane_id
-        self._image_id = image_id
         self._query_geometry = query_geometry
-        self._png_encoder = png_encoder
-        self._terminal = TerminalSession(output, image_id=image_id)
+        self._frame_encoder = CellEncoder() if frame_encoder is None else frame_encoder
+        self._presentation_pause = float(presentation_pause)
+        self._sleep = sleeper
+        self._terminal = TerminalSession(output)
         self._geometry: PaneGeometry | None = None
         self._preflighted = False
         self._initial_pending = False
@@ -73,7 +92,6 @@ class WezTermBackend:
         *,
         output: BinaryIO,
         output_is_terminal: bool,
-        process_id: int | None = None,
         runner: Runner = run_wezterm_cli,
     ) -> WezTermBackend:
         """Build one process backend from explicit shell-owned values."""
@@ -82,17 +100,11 @@ class WezTermBackend:
         if not output_is_terminal:
             raise WezTermPreflightError("stdout must be an interactive terminal")
         pane_id = parse_pane_id(environ)
-        pid = os.getpid() if process_id is None else process_id
         return cls(
             pane_id=pane_id,
             output=output,
-            image_id=make_image_id(pid),
             query_geometry=partial(query_pane_geometry, runner=runner),
         )
-
-    @property
-    def image_id(self) -> int:
-        return self._image_id
 
     def preflight(self) -> None:
         """Cache one required initial geometry before terminal mutation."""
@@ -141,16 +153,14 @@ class WezTermBackend:
         viewport = self._geometry.viewport
         if (frame.width, frame.height) != (viewport.width_px, viewport.height_px):
             raise BackendStateError("frame dimensions must match the latest pane geometry")
-        payload = self._png_encoder(frame)
-        commands = iter_transmit_png(
-            payload,
-            image_id=self._image_id,
-            width=frame.width,
-            height=frame.height,
+        payload = self._frame_encoder(
+            frame,
             columns=self._geometry.columns,
             rows=self._geometry.rows,
         )
-        self._terminal.present(commands)
+        self._terminal.present((payload,))
+        if self._presentation_pause:
+            self._sleep(self._presentation_pause)
 
     def restore(self) -> None:
         """Idempotently restore all terminal state owned by this backend."""

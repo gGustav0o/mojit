@@ -1,4 +1,4 @@
-__pycache__/
+\__pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
@@ -11,7 +11,8 @@ dist/
 .venv/
 venv/
 
-# Phase 0 measurements are reproducible outputs, not source artifacts.
 spikes/results/*.json
 spikes/results/*.csv
 spikes/results/*.log
+
+graphify-out

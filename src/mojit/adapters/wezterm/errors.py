@@ -23,6 +23,10 @@ class KittyProtocolError(WezTermAdapterError):
     """Kitty protocol values cannot be encoded safely."""
 
 
+class CellEncodingError(WezTermAdapterError):
+    """A frame or truecolor cell transport value cannot be encoded safely."""
+
+
 class TerminalStateError(WezTermAdapterError):
     """A terminal lifecycle operation is invalid in the current state."""
 

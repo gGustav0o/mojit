@@ -8,13 +8,14 @@ import pytest
 from mojit.adapters.wezterm.backend import WezTermBackend
 from mojit.adapters.wezterm.errors import (
     BackendStateError,
-    PngEncodingError,
+    CellEncodingError,
     ViewportQueryError,
     WezTermPreflightError,
 )
-from mojit.adapters.wezterm.kitty_protocol import make_image_id
 from mojit.adapters.wezterm.viewport import CommandResult, PaneGeometry
 from mojit.core.models import Frame, Viewport
+
+CELL_PAYLOAD = b"\x1b[38;2;0;0;0m\x1b[48;2;0;0;0m" + "▀".encode() + b"\x1b[0m"
 
 
 def _geometry(
@@ -41,11 +42,11 @@ def _backend(
     kwargs: dict[str, object] = {
         "pane_id": 2,
         "output": io.BytesIO() if output is None else output,
-        "image_id": 101,
         "query_geometry": query,
+        "presentation_pause": 0.0,
     }
     if encoder is not None:
-        kwargs["png_encoder"] = encoder
+        kwargs["frame_encoder"] = encoder
     return WezTermBackend(**kwargs)  # type: ignore[arg-type]
 
 
@@ -77,20 +78,31 @@ def test_transient_poll_failure_returns_none_and_retains_geometry() -> None:
         return result
 
     output = io.BytesIO()
-    backend = _backend(query, output=output, encoder=lambda frame: b"png")
+    backend = _backend(
+        query,
+        output=output,
+        encoder=lambda frame, *, columns, rows: CELL_PAYLOAD,
+    )
     backend.preflight()
     backend.enter()
     assert backend.get_viewport() == Viewport(8, 6)
     assert backend.get_viewport() is None
     backend.present(_frame())
     backend.restore()
-    assert b"c=80,r=24" in output.getvalue()
+    assert CELL_PAYLOAD in output.getvalue()
 
 
 def test_cell_only_geometry_change_is_used_for_next_presentation() -> None:
     results = [_geometry(), _geometry(columns=100, rows=30)]
     output = io.BytesIO()
-    backend = _backend(lambda pane_id: results.pop(0), output=output, encoder=lambda frame: b"png")
+    observed_geometry: list[tuple[int, int]] = []
+
+    def encode(frame: Frame, *, columns: int, rows: int) -> bytes:
+        del frame
+        observed_geometry.append((columns, rows))
+        return CELL_PAYLOAD
+
+    backend = _backend(lambda pane_id: results.pop(0), output=output, encoder=encode)
 
     backend.preflight()
     backend.enter()
@@ -99,7 +111,7 @@ def test_cell_only_geometry_change_is_used_for_next_presentation() -> None:
     backend.present(_frame())
     backend.restore()
 
-    assert b"c=100,r=30" in output.getvalue()
+    assert observed_geometry == [(100, 30)]
 
 
 def test_preflight_maps_expected_query_failure_before_terminal_entry() -> None:
@@ -133,7 +145,10 @@ def test_runtime_rejects_wrong_geometry_contract() -> None:
 
 
 def test_backend_enforces_lifecycle_and_frame_dimensions() -> None:
-    backend = _backend(lambda pane_id: _geometry(), encoder=lambda frame: b"png")
+    backend = _backend(
+        lambda pane_id: _geometry(),
+        encoder=lambda frame, *, columns, rows: CELL_PAYLOAD,
+    )
 
     with pytest.raises(BackendStateError, match="preflighted"):
         backend.enter()
@@ -156,15 +171,16 @@ def test_backend_enforces_lifecycle_and_frame_dimensions() -> None:
 def test_encoder_failure_occurs_before_terminal_presentation_mutation() -> None:
     output = io.BytesIO()
 
-    def fail(frame: Frame) -> bytes:
-        raise PngEncodingError("encode")
+    def fail(frame: Frame, *, columns: int, rows: int) -> bytes:
+        del frame, columns, rows
+        raise CellEncodingError("encode")
 
     backend = _backend(lambda pane_id: _geometry(), output=output, encoder=fail)
     backend.preflight()
     backend.enter()
     entered = output.getvalue()
 
-    with pytest.raises(PngEncodingError, match="encode"):
+    with pytest.raises(CellEncodingError, match="encode"):
         backend.present(_frame())
 
     assert output.getvalue() == entered
@@ -183,6 +199,28 @@ def test_restore_is_idempotent_and_does_not_close_output() -> None:
     assert output.closed is False
 
 
+def test_presentation_pause_runs_after_the_frame_is_flushed() -> None:
+    output = io.BytesIO()
+    observations: list[tuple[float, bytes]] = []
+    backend = WezTermBackend(
+        pane_id=2,
+        output=output,
+        query_geometry=lambda pane_id: _geometry(),
+        frame_encoder=lambda frame, *, columns, rows: CELL_PAYLOAD,
+        presentation_pause=0.1,
+        sleeper=lambda delay: observations.append((delay, output.getvalue())),
+    )
+
+    backend.preflight()
+    backend.enter()
+    backend.present(_frame())
+    backend.restore()
+
+    assert len(observations) == 1
+    assert observations[0][0] == 0.1
+    assert CELL_PAYLOAD in observations[0][1]
+
+
 def test_from_environment_validates_tty_and_uses_exact_pane() -> None:
     document = (
         b'[{"pane_id":7,"size":{"rows":24,"cols":80,"pixel_width":8,"pixel_height":6,"dpi":96}}]'
@@ -197,12 +235,10 @@ def test_from_environment_validates_tty_and_uses_exact_pane() -> None:
         {"WEZTERM_PANE": "7"},
         output=io.BytesIO(),
         output_is_terminal=True,
-        process_id=1234,
         runner=runner,
     )
     backend.preflight()
 
-    assert backend.image_id == make_image_id(1234)
     assert len(calls) == 1
 
 
@@ -230,15 +266,18 @@ def test_from_environment_rejects_non_terminal_before_pane_query() -> None:
         {"pane_id": True},
         {"pane_id": -1},
         {"query_geometry": object()},
-        {"png_encoder": object()},
+        {"frame_encoder": object()},
+        {"presentation_pause": -0.1},
+        {"presentation_pause": float("nan")},
+        {"sleeper": object()},
     ],
 )
 def test_constructor_rejects_invalid_collaborators(kwargs: dict[str, object]) -> None:
     values: dict[str, object] = {
         "pane_id": 2,
         "output": io.BytesIO(),
-        "image_id": 1,
         "query_geometry": lambda pane_id: _geometry(),
+        "presentation_pause": 0.0,
     }
     values.update(kwargs)
     with pytest.raises(TypeError):
