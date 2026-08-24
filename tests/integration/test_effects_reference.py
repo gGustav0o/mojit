@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from PIL import features as pil_features
 
+from mojit.adapters.budoux_segmenter import segment_japanese_phrases
 from mojit.adapters.font_resource import load_font_resource
 from mojit.core.models import Orientation, RenderContext, TextMask, Viewport
 from mojit.core.typography import TypographyKey, rasterize_text_mask
@@ -17,16 +18,16 @@ REFERENCE_FONT = Path("C:/Windows/Fonts/YuGothB.ttc")
 REFERENCE_FONT_SHA256 = "d923a57f781f06198167da4f58287be7ac64a954a47aff4295e078a42b4b68b2"
 REFERENCE_FRAME_SHA256 = {
     (Orientation.HORIZONTAL, "chromatic"): (
-        "7a6bf4f40c19087c5ab158cf97b3371f73296ffd039e8aadd22b86d450879c6b"
+        "059286d5b64ce18ac1ae02238c1462c42bc6158015bc8df7d266fb00761f9bce"
     ),
     (Orientation.HORIZONTAL, "glitch"): (
-        "517de622b43f4408461f6b385f6c50635103bed1489d15acd8c0820ec632b898"
+        "7259d422d4a7d2b73771f9cc9a0896d3e5a170ad511af71ca589d2ee6d9cdeac"
     ),
     (Orientation.HORIZONTAL, "neon"): (
-        "947ffcd0de100d211f9a93df52d38e46187f1eed114bea3492f37b1689ea0569"
+        "d99852907bbea94860114370ce3c234a57c24b57c69a452404c58343d3a11e3e"
     ),
     (Orientation.HORIZONTAL, "pulse"): (
-        "964b5ef5a7bd5ed28e59fa155f32e0a9a007d90e8fe6d4734aa7dbd5eb97f479"
+        "a38586dd35d2a1cdac54a0cdbbd1a00d349654ebd1cfb810eb99ed1e0e613c1d"
     ),
     (Orientation.VERTICAL, "chromatic"): (
         "ffc6e6847c15da24e902af1c9ffdd98c5542c1e3d35f5eebb8ccd28c555d4af2"
@@ -63,6 +64,11 @@ def reference_masks() -> dict[Orientation, TextMask]:
                 orientation=orientation,
                 viewport=viewport,
                 margin=0.08,
+            ),
+            phrases=(
+                segment_japanese_phrases("電脳世界")
+                if orientation is Orientation.HORIZONTAL
+                else ("警告、「猫」。",)
             ),
         )
         for orientation in Orientation

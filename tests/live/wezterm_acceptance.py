@@ -17,6 +17,7 @@ from mojit.adapters.wezterm.backend import WezTermBackend
 from mojit.adapters.wezterm.viewport import parse_pane_id, query_pane_geometry
 from mojit.application.request import PreparedRun
 from mojit.application.runtime import AnimationResult, run_animation
+from mojit.cli import create_rasterizer
 from mojit.config.models import DEFAULT_FPS
 from mojit.core.models import Frame, Orientation, Viewport
 from mojit.core.timing import MAX_FPS
@@ -138,6 +139,7 @@ def _run_bounded(
             request,
             backend=measured,
             clock=SystemMonotonicClock(),
+            rasterizer=create_rasterizer(request),
             should_stop=should_stop or (lambda: measured.metrics.frames == frames),
         )
     finally:

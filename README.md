@@ -23,7 +23,8 @@ reproducible Windows distribution is also complete; see
 
 - Windows 11 and WezTerm;
 - CPython 3.11-3.14 x64;
-- the verified Phase 6 wheelhouse (Pillow/Raqm and FriBiDi are self-contained there);
+- the verified Phase 6 wheelhouse (BudouX, Pillow/Raqm, and FriBiDi are self-contained
+  there);
 - a CJK font. The v1 default is `C:/Windows/Fonts/YuGothB.ttc`.
 
 ## Install from the local release candidate

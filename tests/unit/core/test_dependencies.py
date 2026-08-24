@@ -15,6 +15,7 @@ WEZTERM_BACKEND = WEZTERM_ROOT / "backend.py"
 WEZTERM_VIEWPORT = WEZTERM_ROOT / "viewport.py"
 BOOTSTRAP = SOURCE_ROOT / "bootstrap.py"
 NATIVE_RUNTIME = SOURCE_ROOT / "native_runtime.py"
+BUDOUX_ADAPTER = SOURCE_ROOT / "adapters" / "budoux_segmenter.py"
 FORBIDDEN_CORE_PREFIXES = ("mojit.application", "mojit.adapters", "mojit.config", "mojit.cli")
 FORBIDDEN_CONFIG_PREFIXES = ("mojit.application", "mojit.adapters", "mojit.effects", "mojit.cli")
 FORBIDDEN_REQUEST_PREFIXES = ("mojit.adapters", "mojit.config", "mojit.cli")
@@ -59,6 +60,18 @@ def test_production_package_never_imports_spikes() -> None:
                 violations.append(f"{path.relative_to(PROJECT_ROOT)} -> {imported}")
 
     assert violations == []
+
+
+def test_budoux_dependency_is_isolated_to_its_adapter() -> None:
+    importers = []
+    for path in SOURCE_ROOT.rglob("*.py"):
+        if any(
+            imported == "budoux" or imported.startswith("budoux.")
+            for imported in _imports(path)
+        ):
+            importers.append(path.relative_to(SOURCE_ROOT).as_posix())
+
+    assert importers == [BUDOUX_ADAPTER.relative_to(SOURCE_ROOT).as_posix()]
 
 
 def test_config_does_not_import_outer_project_layers() -> None:

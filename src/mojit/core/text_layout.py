@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import unicodedata
-from bisect import bisect_left
 from itertools import pairwise
 
 TextLines = tuple[str, ...]
+TextPhrases = tuple[str, ...]
 
 MAXIMUM_AUTO_LINES = 16
+MINIMUM_AUTO_LINE_WEIGHT = 4
 
 _PROHIBITED_LINE_START = frozenset(
     ")]}〉》」』】〕〗〙〟｝）］、。，．・：；？！ー〜～…‥’”｠»"
@@ -148,13 +149,40 @@ def _cluster_weight(cluster: str) -> int:
     )
 
 
-def _natural_boundary(clusters: tuple[str, ...], index: int) -> bool:
-    previous = _visible_edge(clusters[index - 1], from_end=True)
-    following = _visible_edge(clusters[index])
-    return previous.isspace() or (
-        unicodedata.east_asian_width(previous) in {"F", "W"}
-        or unicodedata.east_asian_width(following) in {"F", "W"}
-    )
+def _text_weight(text: str) -> int:
+    return sum(map(_cluster_weight, _text_clusters(text)))
+
+
+def validate_text_phrases(text: str, phrases: TextPhrases) -> None:
+    """Require an immutable, lossless partition of one non-empty source string."""
+    if not isinstance(text, str) or not text:
+        raise ValueError("text must be a non-empty string")
+    if not isinstance(phrases, tuple):
+        raise TypeError("phrases must be an immutable tuple")
+    if not phrases or any(not isinstance(phrase, str) or not phrase for phrase in phrases):
+        raise ValueError("phrases must contain non-empty strings")
+    if "".join(phrases) != text:
+        raise ValueError("phrases must reproduce text exactly")
+
+
+def _phrase_boundaries(
+    phrases: TextPhrases,
+    clusters: tuple[str, ...],
+) -> tuple[int, ...]:
+    offsets_to_clusters: dict[int, int] = {}
+    offset = 0
+    for index, cluster in enumerate(clusters, start=1):
+        offset += len(cluster)
+        offsets_to_clusters[offset] = index
+
+    boundaries: list[int] = []
+    phrase_offset = 0
+    for phrase in phrases[:-1]:
+        phrase_offset += len(phrase)
+        cluster_index = offsets_to_clusters.get(phrase_offset)
+        if cluster_index is not None and _safe_boundary(clusters, cluster_index):
+            boundaries.append(cluster_index)
+    return tuple(boundaries)
 
 
 def _balanced_boundaries(
@@ -179,16 +207,9 @@ def _balanced_boundaries(
             boundary: abs(cumulative[boundary] * line_count - total_weight * part)
             for boundary in choices
         }
-        nearby_natural = tuple(
-            boundary
-            for boundary in choices
-            if _natural_boundary(clusters, boundary)
-            and distances[boundary] <= max(1, total_weight // 2)
-        )
-        pool = nearby_natural or choices
-        boundary = min(pool, key=lambda value: (distances[value], value))
+        boundary = min(choices, key=lambda value: (distances[value], value))
         selected.append(boundary)
-        previous_position = bisect_left(boundaries, boundary)
+        previous_position = boundaries.index(boundary, first_position, last_position + 1)
 
     return tuple(selected)
 
@@ -201,25 +222,28 @@ def _lines_at(clusters: tuple[str, ...], boundaries: tuple[int, ...]) -> TextLin
 def horizontal_line_candidates(
     text: str,
     *,
+    phrases: TextPhrases,
     maximum_lines: int = MAXIMUM_AUTO_LINES,
 ) -> tuple[TextLines, ...]:
-    """Return bounded, balanced candidates while preserving text and cluster boundaries."""
-    if not isinstance(text, str) or not text:
-        raise ValueError("text must be a non-empty string")
+    """Balance only language-approved, Unicode-safe phrase boundaries."""
+    validate_text_phrases(text, phrases)
     if isinstance(maximum_lines, bool) or not isinstance(maximum_lines, int) or maximum_lines < 1:
         raise ValueError("maximum_lines must be a positive integer")
 
     clusters = _text_clusters(text)
     candidates: list[TextLines] = [(text,)]
-    boundaries = tuple(
-        index for index in range(1, len(clusters)) if _safe_boundary(clusters, index)
-    )
+    boundaries = _phrase_boundaries(phrases, clusters)
     maximum = min(maximum_lines, len(boundaries) + 1)
 
     for line_count in range(2, maximum + 1):
         selected = _balanced_boundaries(clusters, boundaries, line_count)
         lines = _lines_at(clusters, selected)
-        if any(not line or line.isspace() for line in lines):
+        if any(
+            not line
+            or line.isspace()
+            or _text_weight(line) < MINIMUM_AUTO_LINE_WEIGHT
+            for line in lines
+        ):
             continue
         if lines not in candidates:
             candidates.append(lines)

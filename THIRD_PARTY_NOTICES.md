@@ -11,5 +11,6 @@ The complete corresponding source archive is distributed in
 `src/mojit/_native/licenses/COPYING-LGPL-2.1-or-later.txt`; exact source and
 binary hashes and the build recipe are recorded in `src/mojit/_native/manifest.toml`.
 
-NumPy and Pillow are installed as separate Python distributions. Their own package
-metadata contains their applicable licenses and notices.
+BudouX is installed as a separate Python distribution under the Apache License 2.0.
+NumPy and Pillow are likewise installed as separate Python distributions. Their own
+package metadata contains their applicable licenses and notices.

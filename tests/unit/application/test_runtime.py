@@ -181,14 +181,20 @@ def test_render_session_resize_replaces_cache_and_returning_to_old_size_misses(
 
 def test_render_session_rejects_invalid_construction_and_viewport() -> None:
     with pytest.raises(TypeError, match="PreparedRun"):
-        RenderSession(object())  # type: ignore[arg-type]
+        RenderSession(object(), rasterizer=lambda data, key: _mask_for(key))  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="rasterizer"):
         RenderSession(_request(), rasterizer=object())  # type: ignore[arg-type]
     with pytest.raises(UnknownEffectError):
-        RenderSession(_request(effect_id="unknown"))
+        RenderSession(
+            _request(effect_id="unknown"),
+            rasterizer=lambda data, key: _mask_for(key),
+        )
 
     with pytest.raises(TypeError, match="viewport"):
-        RenderSession(_request()).render(object(), 0)  # type: ignore[arg-type]
+        RenderSession(
+            _request(),
+            rasterizer=lambda data, key: _mask_for(key),
+        ).render(object(), 0)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("wrong_result", [object(), _frame_for(Viewport(1, 1))])

@@ -9,9 +9,14 @@ import traceback
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from functools import partial
 from pathlib import Path
 from typing import BinaryIO, TextIO, cast
 
+from mojit.adapters.budoux_segmenter import (
+    JapaneseSegmentationError,
+    segment_japanese_phrases,
+)
 from mojit.adapters.clock import SystemMonotonicClock
 from mojit.adapters.config_file import ConfigFileError, load_config_document
 from mojit.adapters.font_resource import FontResourceError, load_font_resource
@@ -19,7 +24,7 @@ from mojit.adapters.wezterm.backend import WezTermBackend
 from mojit.adapters.wezterm.errors import WezTermPreflightError
 from mojit.application.input_text import InputTextError, resolve_input_text
 from mojit.application.request import PreparedRun
-from mojit.application.runtime import run_animation
+from mojit.application.runtime import Rasterizer, run_animation
 from mojit.config.models import (
     DEFAULT_FPS,
     MAX_FPS,
@@ -30,7 +35,11 @@ from mojit.config.models import (
 from mojit.config.resolve import resolve_config
 from mojit.config.toml import ConfigSyntaxError, parse_toml_config
 from mojit.core.models import Orientation
-from mojit.core.typography import ShapingUnavailableError, require_shaping_capability
+from mojit.core.typography import (
+    ShapingUnavailableError,
+    rasterize_text_mask,
+    require_shaping_capability,
+)
 from mojit.effects.registry import UnknownEffectError, effect_names, get_effect
 
 
@@ -200,6 +209,7 @@ _USER_ERRORS = (
     ConfigValidationError,
     InputTextError,
     FontResourceError,
+    JapaneseSegmentationError,
     ShapingUnavailableError,
     UnknownEffectError,
     WezTermPreflightError,
@@ -226,18 +236,29 @@ def _create_backend(
     )
 
 
+def create_rasterizer(request: PreparedRun) -> Rasterizer:
+    """Bind one invocation's immutable language analysis to the core rasterizer."""
+    phrases = (
+        segment_japanese_phrases(request.text)
+        if request.orientation is Orientation.HORIZONTAL
+        else (request.text,)
+    )
+    return partial(rasterize_text_mask, phrases=phrases)
+
+
 def execute_prepared_run(
     request: PreparedRun,
     *,
     backend: WezTermBackend,
     clock: SystemMonotonicClock,
+    rasterizer: Rasterizer,
 ) -> None:
     """Run one lifecycle without losing either primary or cleanup failures."""
     backend.preflight()
     primary: BaseException | None = None
     try:
         backend.enter()
-        run_animation(request, backend=backend, clock=clock)
+        run_animation(request, backend=backend, clock=clock, rasterizer=rasterizer)
     except BaseException as error:  # noqa: BLE001  # cleanup includes interrupt
         primary = error
 
@@ -263,11 +284,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if parsed.text is None:
             _configure_piped_stdin(sys.stdin)
         request = prepare_run(parsed, stdin=sys.stdin, environ=os.environ, cwd=Path.cwd().resolve())
+        rasterizer = create_rasterizer(request)
         backend = _create_backend(os.environ, sys.stdout)
         execute_prepared_run(
             request,
             backend=backend,
             clock=SystemMonotonicClock(),
+            rasterizer=rasterizer,
         )
         return 0
     except _CliExit as exit_request:

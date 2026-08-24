@@ -35,13 +35,18 @@ content identity. Typography receives no path or open file handle. `TypographyKe
 is both the rendering request and cache identity; it contains only values that can
 change the mask.
 
-Horizontal auto-layout is split across two core boundaries. `text_layout.py` is pure:
-it produces a bounded set of balanced, Unicode-aware line candidates without knowing
-about Pillow, fonts, viewports, or terminal cells. `typography.py` measures those
-candidates with the selected font and chooses the largest fitted size, using the
-original one-line form as the tie winner. Vertical shaping remains a single Raqm
-`direction="ttb"` run. Because the chosen layout is derived entirely from the existing
-`TypographyKey`, no second cache identity or mutable layout state is introduced.
+Horizontal auto-layout has three isolated boundaries. The BudouX adapter loads its
+pinned Japanese model once per horizontal invocation and returns an immutable,
+lossless phrase partition. Pure `text_layout.py` intersects those phrase boundaries
+with Unicode-cluster and Japanese punctuation safety, balances a bounded candidate
+set, and rejects automatic layouts containing an orphan line narrower than two
+fullwidth cells. It knows nothing about BudouX, Pillow, fonts, viewports, or terminal
+cells. `typography.py` measures the approved candidates with the selected font and
+chooses the largest fitted size, using the original one-line form as the tie winner.
+Vertical shaping bypasses language segmentation and remains one Raqm `direction="ttb"`
+run. Phrases are derived from the text under a pinned model and bound to the
+per-invocation rasterizer, so `TypographyKey` remains the complete cache identity and
+no mutable layout state is introduced.
 
 The config-file adapter owns discovery, bounded reads, and UTF-8 decoding. The TOML
 module is pure and accepts only a closed set of root-level keys. Config resolution is
@@ -49,9 +54,11 @@ an explicit field-by-field `CLI > file > defaults` operation with source-relativ
 paths.
 
 The CLI is the Phase 2 composition root. Before terminal access it resolves one-line
-Unicode input, loads and validates the font, checks Raqm/FriBiDi, and creates an
-immutable `PreparedRun`. That request contains values and font bytes only: no paths,
-streams, parsed TOML, CLI namespaces, environment, or adapter objects.
+Unicode input, loads and validates the font, checks Raqm/FriBiDi, creates an immutable
+`PreparedRun`, and binds language phrases to the concrete rasterizer. Segmentation
+failures therefore cannot leave terminal state mutated. The request itself contains
+values and font bytes only: no paths, streams, parsed TOML, CLI namespaces,
+environment, adapter objects, or parsed language models.
 
 The compositor is a pure full-viewport boundary. Transform operations accept
 immutable `TextMask`/`Frame` values, use clipped transparent edges, and return new
@@ -89,9 +96,10 @@ sequences without adding an LRU policy that one active run does not need.
 `FixedStepScheduler` is immutable arithmetic over explicit timestamps. The runtime
 uses absolute deadlines, drops missed frame indices, polls viewport on an independent
 250 ms cadence, and constructs effect elapsed time only as `frame_index / fps`.
-`RenderSession` is the pure composition boundary from `PreparedRun`, `Viewport`, and
-frame index to `Frame`; the synchronous loop alone reads the clock, polls, sleeps, and
-presents. Neither object retains frame history.
+`RenderSession` is the pure composition boundary from `PreparedRun`, an explicitly
+injected rasterizer, `Viewport`, and frame index to `Frame`; the synchronous loop
+alone reads the clock, polls, sleeps, and presents. Neither object retains frame
+history, and the application layer has no concrete rasterizer dependency.
 
 The public FPS contract is a target presentation and effect-sampling rate from 1
 through 15, with a default of 8. Shared range constants live in `core.timing`;

@@ -22,7 +22,12 @@ from mojit.core.layout import (
     validate_margin,
 )
 from mojit.core.models import ModelValidationError, Orientation, TextMask, Viewport
-from mojit.core.text_layout import TextLines, horizontal_line_candidates
+from mojit.core.text_layout import (
+    TextLines,
+    TextPhrases,
+    horizontal_line_candidates,
+    validate_text_phrases,
+)
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _LINE_SPACING_RATIO = 0.15
@@ -207,8 +212,20 @@ def _fit_lines(
     )
 
 
-def rasterize_text_mask(font_data: bytes, key: TypographyKey) -> TextMask:
+def rasterize_text_mask(
+    font_data: bytes,
+    key: TypographyKey,
+    *,
+    phrases: TextPhrases,
+) -> TextMask:
     """Render a deterministic, centered alpha mask in full-viewport coordinates."""
+    candidates = (
+        horizontal_line_candidates(key.text, phrases=phrases)
+        if key.orientation is Orientation.HORIZONTAL
+        else ((key.text,),)
+    )
+    if key.orientation is Orientation.VERTICAL:
+        validate_text_phrases(key.text, phrases)
     if not isinstance(font_data, bytes) or not font_data:
         raise FontDataError("font_data must be non-empty bytes")
     if hashlib.sha256(font_data).hexdigest() != key.font_fingerprint:
@@ -226,11 +243,6 @@ def rasterize_text_mask(font_data: bytes, key: TypographyKey) -> TextMask:
             fonts[size] = _load_font(font_data, size)
         return fonts[size]
 
-    candidates = (
-        horizontal_line_candidates(key.text)
-        if key.orientation is Orientation.HORIZONTAL
-        else ((key.text,),)
-    )
     fitted_candidates: list[_FittedText] = []
     for lines in candidates:
         try:

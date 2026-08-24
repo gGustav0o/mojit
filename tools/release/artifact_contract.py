@@ -72,6 +72,7 @@ def inspect_wheel(path: Path) -> dict[str, object]:
             "Version: 1.0.0",
             "Requires-Python: <3.15,>=3.11",
             "License-Expression: MIT",
+            "Requires-Dist: budoux==0.9.0",
             "Requires-Dist: numpy==2.4.6",
             "Requires-Dist: Pillow==12.3.0",
         ):

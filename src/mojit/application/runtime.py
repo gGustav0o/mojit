@@ -12,7 +12,7 @@ from mojit.application.ports import AnimationBackend, MonotonicClock
 from mojit.application.request import PreparedRun
 from mojit.application.scheduler import FixedStepScheduler
 from mojit.core.models import Frame, RenderContext, TextMask, Viewport
-from mojit.core.typography import TypographyKey, rasterize_text_mask
+from mojit.core.typography import TypographyKey
 from mojit.effects.api import Effect, EffectConfig
 from mojit.effects.registry import get_effect
 
@@ -49,7 +49,7 @@ class RenderSession:
         self,
         request: PreparedRun,
         *,
-        rasterizer: Rasterizer = rasterize_text_mask,
+        rasterizer: Rasterizer,
     ) -> None:
         if not isinstance(request, PreparedRun):
             raise TypeError("request must be a PreparedRun")
@@ -135,7 +135,7 @@ def run_animation(
     *,
     backend: AnimationBackend,
     clock: MonotonicClock,
-    rasterizer: Rasterizer = rasterize_text_mask,
+    rasterizer: Rasterizer,
     should_stop: StopPredicate | None = None,
 ) -> AnimationResult:
     """Run synchronous animation until cooperative stop or a propagated failure."""

@@ -83,9 +83,9 @@ def test_typography_key_rejects_invalid_features(features: object) -> None:
 
 def test_rasterizer_rejects_empty_or_mismatched_font_data_before_shaping() -> None:
     with pytest.raises(FontDataError, match="non-empty"):
-        rasterize_text_mask(b"", _key())
+        rasterize_text_mask(b"", _key(), phrases=("電脳世界",))
     with pytest.raises(FontDataError, match="does not match"):
-        rasterize_text_mask(b"not a font", _key())
+        rasterize_text_mask(b"not a font", _key(), phrases=("電脳世界",))
 
 
 def test_rasterizer_reports_missing_shaping_capability(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,7 +94,7 @@ def test_rasterizer_reports_missing_shaping_capability(monkeypatch: pytest.Monke
     monkeypatch.setattr("mojit.core.typography.pil_features.check_feature", lambda _: False)
 
     with pytest.raises(ShapingUnavailableError, match="FriBiDi"):
-        rasterize_text_mask(font_data, key)
+        rasterize_text_mask(font_data, key, phrases=(key.text,))
 
 
 def test_public_shaping_preflight_reports_missing_raqm(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,4 +116,4 @@ def test_rasterizer_maps_invalid_matching_font_data(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("mojit.core.typography.pil_features.check_feature", lambda _: True)
 
     with pytest.raises(FontDataError, match="Pillow/FreeType"):
-        rasterize_text_mask(font_data, key)
+        rasterize_text_mask(font_data, key, phrases=(key.text,))

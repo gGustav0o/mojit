@@ -237,6 +237,11 @@ def test_list_mode_main_performs_no_config_font_or_shaping_io(
     monkeypatch.setattr(cli, "load_config_document", lambda *args, **kwargs: pytest.fail("config"))
     monkeypatch.setattr(cli, "load_font_resource", lambda *args, **kwargs: pytest.fail("font"))
     monkeypatch.setattr(cli, "require_shaping_capability", lambda: pytest.fail("shaping"))
+    monkeypatch.setattr(
+        cli,
+        "segment_japanese_phrases",
+        lambda text: pytest.fail(f"segmentation: {text}"),
+    )
 
     assert cli.main(["--list-effects"]) == 0
     captured = capsys.readouterr()

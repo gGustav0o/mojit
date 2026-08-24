@@ -26,6 +26,9 @@ $wheel = Get-Item (Join-Path $distRoot "mojit-1.0.0-py3-none-win_amd64.whl")
 if ($LASTEXITCODE -ne 0) { throw "Wheel contract failed" }
 Copy-Item -LiteralPath $wheel.FullName -Destination $wheelhouse
 
+& $pythonPath -m pip download --disable-pip-version-check --only-binary=:all: --no-deps --dest $wheelhouse "budoux==0.9.0"
+if ($LASTEXITCODE -ne 0) { throw "BudouX dependency download failed" }
+
 foreach ($minor in @("311", "312", "313", "314")) {
     & $pythonPath -m pip download --disable-pip-version-check --only-binary=:all: --no-deps --dest $wheelhouse --platform win_amd64 --implementation cp --python-version $minor --abi "cp$minor" "numpy==2.4.6" "Pillow==12.3.0"
     if ($LASTEXITCODE -ne 0) { throw "Dependency download failed for CPython $minor" }

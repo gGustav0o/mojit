@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
+import importlib.metadata
 import json
 import os
 import sys
@@ -53,6 +54,15 @@ def main() -> int:
     runtime = activate_native_runtime()
     from PIL import Image, ImageDraw, ImageFont, features
 
+    from mojit.adapters.budoux_segmenter import segment_japanese_phrases
+
+    budoux_version = importlib.metadata.version("budoux")
+    if budoux_version != "0.9.0":
+        raise RuntimeError(f"unexpected installed BudouX version: {budoux_version}")
+    phrases = segment_japanese_phrases("僕の心のヤバイやつ")
+    if phrases != ("僕の", "心の", "ヤバイや", "つ"):
+        raise RuntimeError(f"unexpected BudouX Japanese segmentation: {phrases}")
+
     if not features.check_feature("raqm"):
         raise RuntimeError("installed Pillow has no Raqm support")
     font_path = Path(os.environ.get("MOJIT_PROBE_FONT", "C:/Windows/Fonts/YuGothB.ttc"))
@@ -77,6 +87,8 @@ def main() -> int:
             {
                 "python": sys.version.split()[0],
                 "implementation": sys.implementation.name,
+                "budoux": budoux_version,
+                "japanese_phrases": phrases,
                 "raqm": True,
                 "fribidi": str(expected_dll),
                 "fribidi_sha256": dll_hash,
