@@ -12,6 +12,7 @@ from mojit.core.models import Frame, RenderContext
 from mojit.core.randomness import make_rng
 from mojit.layers.api import (
     particle_count,
+    periodic_distance,
     transparent_rgba,
     validate_color,
     validate_context,
@@ -89,11 +90,13 @@ class RainLayer:
             opacity_factors,
             strict=True,
         ):
-            y = (
-                origin_y
-                + frame_context.elapsed_seconds * self.speed_px_per_second * speed_factor
-                + self.streak_length_px
-            ) % cycle - self.streak_length_px
+            distance = periodic_distance(
+                frame_context.elapsed_seconds,
+                self.speed_px_per_second,
+                cycle,
+                rate_factor=float(speed_factor),
+            )
+            y = (origin_y + distance + self.streak_length_px) % cycle - self.streak_length_px
             alpha = round(self.color.alpha * opacity_factor)
             draw.line(
                 (

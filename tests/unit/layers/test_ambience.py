@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import sys
 from dataclasses import FrozenInstanceError
 
 import numpy as np
@@ -42,6 +43,14 @@ def test_ambient_layers_change_with_elapsed_time(layer: object) -> None:
     assert layer.render(_context(elapsed=0.0)) != layer.render(  # type: ignore[attr-defined]
         _context(elapsed=0.75)
     )
+
+
+@pytest.mark.parametrize("layer", LAYERS)
+def test_ambient_layers_render_at_the_largest_finite_elapsed_time(layer: object) -> None:
+    frame = layer.render(_context(elapsed=sys.float_info.max))  # type: ignore[attr-defined]
+
+    assert frame.rgba.shape == (64, 96, 4)
+    assert np.count_nonzero(frame.rgba[..., 3]) > 0
 
 
 @pytest.mark.parametrize("layer", LAYERS)

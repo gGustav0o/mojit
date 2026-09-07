@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gc
+import weakref
 from dataclasses import FrozenInstanceError, dataclass
 
 import numpy as np
@@ -70,6 +72,38 @@ def test_scene_rejects_more_than_the_bounded_layer_limit() -> None:
 
     with pytest.raises(SceneCompositionError, match=str(MAX_SCENE_LAYERS)):
         Scene(layers)
+
+
+def test_maximum_layer_scene_streams_larger_frames_with_bounded_live_inputs() -> None:
+    viewport = Viewport(960, 540)
+    context = RenderContext(viewport, 1_000_000, 1_000_000.0)
+    arrays: list[weakref.ReferenceType[np.ndarray]] = []
+    live_before_render: list[int] = []
+
+    @dataclass(frozen=True, slots=True)
+    class TrackingLayer:
+        index: int
+
+        def render(self, received: RenderContext) -> Frame:
+            assert received is context
+            gc.collect()
+            live_before_render.append(sum(reference() is not None for reference in arrays))
+            values = np.zeros((viewport.height_px, viewport.width_px, 4), dtype=np.uint8)
+            values[..., self.index % 3] = self.index * 7
+            values[..., 3] = 32
+            frame = Frame(viewport.width_px, viewport.height_px, values)
+            arrays.append(weakref.ref(frame.rgba))
+            return frame
+
+    result = render_scene(
+        Scene(tuple(TrackingLayer(index) for index in range(MAX_SCENE_LAYERS))),
+        context,
+    )
+    gc.collect()
+
+    assert result.rgba.shape == (540, 960, 4)
+    assert max(live_before_render) <= 1
+    assert all(reference() is None for reference in arrays)
 
 
 def test_render_scene_rejects_invalid_boundaries_and_layer_results() -> None:

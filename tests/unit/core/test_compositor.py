@@ -157,6 +157,19 @@ def test_alpha_composite_many_matches_pairwise_bytes_and_preserves_single_frame(
     assert alpha_composite_many((frames[0],)) is frames[0]
 
 
+def test_alpha_composite_many_accepts_a_single_pass_frame_stream() -> None:
+    frame = Frame(1, 1, np.array([[[1, 2, 3, 255]]], dtype=np.uint8))
+    consumed: list[int] = []
+
+    def frames():
+        for index in range(3):
+            consumed.append(index)
+            yield frame
+
+    assert alpha_composite_many(frames()) == frame
+    assert consumed == [0, 1, 2]
+
+
 def test_alpha_composite_many_rejects_invalid_sequences() -> None:
     frame = Frame(1, 1, np.zeros((1, 1, 4), dtype=np.uint8))
     other = Frame(2, 1, np.zeros((1, 2, 4), dtype=np.uint8))

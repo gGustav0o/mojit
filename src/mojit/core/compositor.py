@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from numbers import Integral, Real
 
@@ -180,28 +180,37 @@ def alpha_composite(bottom: Frame, top: Frame) -> Frame:
     return Frame(lower.width, lower.height, rgba)
 
 
-def alpha_composite_many(frames: Sequence[Frame]) -> Frame:
-    """Composite a non-empty back-to-front frame sequence with one result copy."""
-    if isinstance(frames, (str, bytes)) or not isinstance(frames, Sequence):
-        raise CompositorError("frames must be a sequence")
-    contributions = tuple(frames)
-    if not contributions:
-        raise CompositorError("frames must not be empty")
-    validated = tuple(
-        _require_frame(frame, name=f"frames[{index}]") for index, frame in enumerate(contributions)
-    )
-    dimensions = {(frame.width, frame.height) for frame in validated}
-    if len(dimensions) != 1:
-        raise CompositorError("frames must have equal dimensions")
-    if len(validated) == 1:
-        return validated[0]
+def alpha_composite_many(frames: Iterable[Frame]) -> Frame:
+    """Composite a non-empty back-to-front stream while retaining bounded inputs."""
+    if isinstance(frames, (str, bytes)) or not isinstance(frames, Iterable):
+        raise CompositorError("frames must be a sequence or iterable")
+    iterator = iter(frames)
+    try:
+        first = _require_frame(next(iterator), name="frames[0]")
+    except StopIteration as error:
+        raise CompositorError("frames must not be empty") from error
 
-    result = Image.fromarray(validated[0].rgba)
-    for overlay in validated[1:]:
+    try:
+        second = _require_frame(next(iterator), name="frames[1]")
+    except StopIteration:
+        return first
+    dimensions = (first.width, first.height)
+    if (second.width, second.height) != dimensions:
+        raise CompositorError("frames must have equal dimensions")
+
+    result = Image.fromarray(first.rgba)
+    result.alpha_composite(Image.fromarray(second.rgba))
+    width, height = dimensions
+    del first, second
+    for index, overlay_value in enumerate(iterator, start=2):
+        overlay = _require_frame(overlay_value, name=f"frames[{index}]")
+        if (overlay.width, overlay.height) != dimensions:
+            raise CompositorError("frames must have equal dimensions")
         result.alpha_composite(Image.fromarray(overlay.rgba))
+        del overlay, overlay_value
     rgba = np.array(result, dtype=np.uint8, copy=True)
     rgba[rgba[..., 3] == 0, :3] = 0
-    return Frame(validated[0].width, validated[0].height, rgba)
+    return Frame(width, height, rgba)
 
 
 def composite_colorized_masks(

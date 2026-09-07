@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -49,15 +49,17 @@ def render_scene(scene: Scene, context: RenderContext) -> Frame:
         raise SceneCompositionError("context must be a RenderContext")
 
     expected = (context.viewport.width_px, context.viewport.height_px)
-    contributions: list[Frame] = []
-    for index, layer in enumerate(scene.layers):
-        frame = layer.render(context)
-        if not isinstance(frame, Frame):
-            raise SceneCompositionError(f"layer {index} must return a Frame")
-        if (frame.width, frame.height) != expected:
-            raise SceneCompositionError(
-                f"layer {index} frame dimensions must match the context viewport"
-            )
-        contributions.append(frame)
 
-    return alpha_composite_many(contributions)
+    def rendered_layers() -> Iterator[Frame]:
+        for index, layer in enumerate(scene.layers):
+            frame = layer.render(context)
+            if not isinstance(frame, Frame):
+                raise SceneCompositionError(f"layer {index} must return a Frame")
+            if (frame.width, frame.height) != expected:
+                raise SceneCompositionError(
+                    f"layer {index} frame dimensions must match the context viewport"
+                )
+            yield frame
+            del frame
+
+    return alpha_composite_many(rendered_layers())

@@ -13,6 +13,7 @@ from mojit.core.models import Frame, RenderContext
 from mojit.core.randomness import make_rng
 from mojit.layers.api import (
     particle_count,
+    periodic_phase,
     transparent_rgba,
     validate_color,
     validate_context,
@@ -78,7 +79,7 @@ class StarsLayer:
             strict=True,
         ):
             wave = 0.5 + 0.5 * math.sin(
-                float(phase) + math.tau * self.twinkle_hz * frame_context.elapsed_seconds
+                float(phase) + periodic_phase(frame_context.elapsed_seconds, self.twinkle_hz)
             )
             alpha = round(self.color.alpha * float(strength) * (0.3 + 0.7 * wave))
             center_x = int(x)

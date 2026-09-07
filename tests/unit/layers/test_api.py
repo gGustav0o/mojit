@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import math
+import sys
+
 import numpy as np
 import pytest
 
@@ -9,6 +12,8 @@ from mojit.layers.api import (
     MAX_PARTICLES_PER_LAYER,
     LayerInputError,
     particle_count,
+    periodic_distance,
+    periodic_phase,
     transparent_rgba,
     validate_color,
     validate_context,
@@ -24,6 +29,21 @@ def test_particle_count_is_viewport_relative_zeroable_and_hard_capped() -> None:
     assert particle_count(viewport, 0.00001) == 1
     assert particle_count(viewport, 0.01) == 50
     assert particle_count(Viewport(100_000, 100_000), 0.1) == MAX_PARTICLES_PER_LAYER
+
+
+def test_periodic_motion_reduces_time_before_multiplication() -> None:
+    distance = periodic_distance(
+        sys.float_info.max,
+        sys.float_info.max,
+        73.0,
+        rate_factor=1.25,
+    )
+    phase = periodic_phase(sys.float_info.max, 20.0)
+
+    assert math.isfinite(distance) and 0.0 <= distance < 73.0
+    assert math.isfinite(phase) and 0.0 <= phase < math.tau
+    assert periodic_distance(sys.float_info.max, 0.0, 73.0) == 0.0
+    assert periodic_phase(sys.float_info.max, 0.0) == 0.0
 
 
 def test_transparent_rgba_matches_viewport_without_shared_storage() -> None:

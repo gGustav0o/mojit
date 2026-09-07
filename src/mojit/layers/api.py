@@ -88,6 +88,28 @@ def particle_count(viewport: Viewport, density: float) -> int:
     return min(requested, MAX_PARTICLES_PER_LAYER)
 
 
+def periodic_distance(
+    elapsed_seconds: float,
+    units_per_second: float,
+    period: float,
+    *,
+    rate_factor: float = 1.0,
+) -> float:
+    """Return ``elapsed * rate`` modulo a period without overflowing first."""
+    if units_per_second == 0.0 or rate_factor == 0.0:
+        return 0.0
+    cycle_seconds = period / units_per_second / rate_factor
+    return math.fmod(elapsed_seconds, cycle_seconds) * units_per_second * rate_factor
+
+
+def periodic_phase(elapsed_seconds: float, frequency_hz: float) -> float:
+    """Return a stable angular phase for any finite non-negative elapsed time."""
+    if frequency_hz == 0.0:
+        return 0.0
+    period_seconds = 1.0 / frequency_hz
+    return math.tau * (math.fmod(elapsed_seconds, period_seconds) / period_seconds)
+
+
 def transparent_rgba(viewport: Viewport) -> NDArray[np.uint8]:
     """Allocate one transparent full-viewport straight-alpha buffer."""
     return np.zeros((viewport.height_px, viewport.width_px, 4), dtype=np.uint8)

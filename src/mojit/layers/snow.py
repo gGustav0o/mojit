@@ -13,6 +13,8 @@ from mojit.core.models import Frame, RenderContext
 from mojit.core.randomness import make_rng
 from mojit.layers.api import (
     particle_count,
+    periodic_distance,
+    periodic_phase,
     transparent_rgba,
     validate_color,
     validate_context,
@@ -95,14 +97,18 @@ class SnowLayer:
         ):
             radius_px = int(radius)
             cycle = viewport.height_px + radius_px * 2
-            y = (
-                origin_y
-                + frame_context.elapsed_seconds * self.speed_px_per_second * speed_factor
-                + radius_px
-            ) % cycle - radius_px
+            distance = periodic_distance(
+                frame_context.elapsed_seconds,
+                self.speed_px_per_second,
+                cycle,
+                rate_factor=float(speed_factor),
+            )
+            y = (origin_y + distance + radius_px) % cycle - radius_px
             x = (
                 origin_x
-                + math.sin(float(phase) + math.tau * self.drift_hz * frame_context.elapsed_seconds)
+                + math.sin(
+                    float(phase) + periodic_phase(frame_context.elapsed_seconds, self.drift_hz)
+                )
                 * self.drift_px
             ) % viewport.width_px
             alpha = round(self.color.alpha * float(opacity_factor))
