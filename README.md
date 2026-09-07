@@ -11,6 +11,8 @@ For current development, read:
 - [docs/ROADMAP.md](docs/ROADMAP.md) — what to build next;
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — dependency boundaries and evolution
   rules;
+- [docs/HARDENING.md](docs/HARDENING.md) — current release-readiness evidence and
+  remaining gates;
 - [AGENTS.md](AGENTS.md) — autonomous-agent operating rules.
 
 [SPEC.md](SPEC.md) is the implemented **v1 compatibility contract**, not the complete
@@ -132,10 +134,56 @@ cannot be delivered. Close the affected pane to recover its terminal state.
 ## Reproduce and verify
 
 ```powershell
+.\tools\verify.ps1
+```
+
+This is the source and CI gate. It validates the Python environment, repository
+hygiene, lint and formatting, the non-graphical test suite with at least 95% coverage,
+bytecode compilation, source CLI discovery, a wheel build, an isolated wheel install,
+and installed scene configuration/rendering smoke checks. Pass `-Python` when the
+development interpreter is elsewhere:
+
+```powershell
+.\tools\verify.ps1 -Python C:\Path\To\python.exe
+```
+
+Release-candidate construction and the full offline CPython matrix remain separate:
+
+```powershell
 .\tools\release\build_fribidi.ps1
 .\tools\release\build_artifacts.ps1
 .\tools\release\verify_artifacts.ps1
 ```
+
+Graphical WezTerm acceptance is intentionally not part of headless CI. Run it from a
+disposable interactive pane with the installed-artifact helper documented in
+`tools/release/run_installed_live.ps1`.
+
+## Longevity evidence
+
+The automated 1,000-frame tests prove bounded application/cache/transport ownership,
+but they do not prove stable process memory. For a sustained measurement of the actual
+Python renderer process, run:
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\scene_soak.py --duration-seconds 600 --output scene-memory.json
+```
+
+To exercise the maximum supported scene layer count at a large viewport:
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\scene_soak.py --duration-seconds 600 --width 1920 --height 1080 --layer-count 16 --output scene-memory-16-layers.json
+```
+
+The probe samples Windows working set and private bytes after warmup and reports raw
+samples plus a latter-half trend. Treat the trend as diagnostic evidence, not as an
+automatic leak verdict: Python, NumPy, and Pillow allocators may retain arenas, and a
+short or single before/after sample is not a meaningful bound. The live WezTerm soak
+now records the renderer process and terminal emulator separately.
+
+The repository still declares version `1.0.0`, the released v1 compatibility version.
+No post-v1 public version has been selected in project policy, so choose and update the
+version consistently before publishing any scene-engine release.
 
 The project is MIT-licensed. FriBiDi remains LGPL-2.1-or-later and separately
 replaceable; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

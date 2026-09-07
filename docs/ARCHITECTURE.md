@@ -127,11 +127,13 @@ Phase 7 adds `core.scene` as the pure composition boundary. An immutable non-emp
 `Scene` stores structural `Layer` values in explicit back-to-front order. Every layer
 receives the same validated `RenderContext` and must return an immutable full-viewport
 `Frame`; the boundary rejects non-frame and mismatched-viewport results before
-presentation. The first contribution is retained unchanged. Multi-layer scenes use
-one validated in-place Pillow source-over pass and create one immutable result,
-avoiding an immutable full-frame copy after every pairwise blend. This makes z-order
-and viewport clipping explicit without a retained scene graph, ECS, plugin API, or
-backend knowledge.
+presentation. The first contribution is retained unchanged for a one-layer scene.
+Multi-layer scenes stream validated layer frames into one in-place Pillow source-over
+pass and create one immutable result. Previously all layer frames remained live until
+composition completed; the streaming fold now bounds simultaneous contribution
+ownership independently of configured layer count. This makes z-order and viewport
+clipping explicit without a retained scene graph, ECS, plugin API, or backend
+knowledge.
 
 A companion batch primitive colorizes and composites multiple masks directly. Neon
 uses it for outer glow, inner glow, and glyph core, preserving the established bytes
@@ -153,7 +155,9 @@ and explicit elapsed time. They retain no simulation or viewport history, use no
 global RNG, and cap each generated field at 4,096 particles. Density is
 viewport-relative below that cap. Resize therefore replaces transient frame data
 rather than migrating state, and rendering an earlier viewport/time again reproduces
-the same frame.
+the same frame. Periodic motion reduces elapsed time before multiplying by velocity or
+frequency, so every finite non-negative `RenderContext.elapsed_seconds` remains a
+valid deterministic input rather than overflowing intermediate motion arithmetic.
 
 Phase 9 currently adds a small explicit built-in scene registry as a composition
 layer above core/effects/procedural layers. `rainy-night`, `snowfall`, and `space`

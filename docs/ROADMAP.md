@@ -168,8 +168,9 @@ configuration without changing source code.
 - Multi-layer 1,000-frame application and transport tests enforce bounded ownership.
   A five-minute `rainy-night` run presented 2,104 frames across four detected
   two-axis resizes, wrote 24,176,946 terminal bytes, and restored cleanly. Its observed
-  WezTerm working-set delta was +44,834,816 bytes; this process-level sample is
-  recorded as evidence, not treated as a general leak bound.
+  WezTerm working-set delta was +44,834,816 bytes; this terminal-emulator sample is
+  recorded as transport evidence, not treated as mojit process memory or a general
+  leak bound.
 - Batch scene composition removed pairwise immutable frame copies. A second fused
   mask-colorization path preserves the established neon reference bytes while
   avoiding three intermediate RGBA frames. At 930×667 the warmed complete preset
@@ -200,6 +201,50 @@ Turn the technically working scene engine into something worth leaving on screen
 
 Visual fidelity in live use is an acceptance criterion here. Historical v1 transport
 acceptance is necessary evidence, not sufficient evidence that a scene looks good.
+
+---
+
+## Phase 11 — Scene-engine hardening and release readiness
+
+**Status:** complete locally (2026-09-08); first hosted CI run and public version
+selection remain release gates.
+
+### Goal
+
+Independently audit the large post-v1 scene implementation, make repository health
+mechanically checkable, correct longevity evidence, bound avoidable composition
+memory, and extend artifact checks to scene functionality.
+
+### Completion evidence
+
+- `tools/verify.ps1` is the single developer/CI source gate. It validates environment,
+  repository archive hygiene, lint, format, 95% coverage, non-graphical tests,
+  compilation, source CLI discovery, wheel build, isolated install, and installed
+  scene parsing/rendering. The Windows workflow runs it at the supported Python range
+  endpoints without requiring a graphical terminal.
+- The accidentally tracked `mojit.rar` is removed and present tracked ZIP/RAR files
+  fail the source gate.
+- Scene composition streams layer contributions. A 16-layer 960×540 test verifies
+  deterministic completion and bounded live input buffers instead of retaining every
+  full frame.
+- Procedural motion remains valid at the largest finite elapsed time by reducing
+  periodic time before velocity/frequency multiplication.
+- The standalone scene soak and live WezTerm soak now measure the renderer Python
+  process working set/private bytes. Documentation distinguishes raw long-run evidence
+  from the automated bounded-state tests and avoids a flaky short-window leak limit.
+- Release inventory and installed probes cover scene listing, versioned config parsing,
+  deterministic multi-layer construction/rendering, and legacy effect discovery.
+- The rebuilt release candidate passes wheel/bundle contracts, offline installed probes,
+  and the user installer workflow on CPython 3.11, 3.12, 3.13, and 3.14.
+- The local source gate passes with 672 tests and 97.18% coverage. Hosted CI and live
+  graphical acceptance are separate evidence and are not claimed as run by this audit.
+
+### Remaining release gate
+
+The source and artifact tooling still use `1.0.0`, the documented v1 release version.
+No repository policy selects a post-v1 version, so this audit does not invent one.
+Choose the public version and update all metadata/artifact contracts before publishing.
+See [HARDENING.md](HARDENING.md) for the full disposition and evidence limits.
 
 ---
 
