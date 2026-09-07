@@ -45,11 +45,7 @@ def _mask(
         viewport=viewport,
         margin=0.08,
     )
-    phrases = (
-        segment_japanese_phrases(text)
-        if orientation is Orientation.HORIZONTAL
-        else (text,)
-    )
+    phrases = segment_japanese_phrases(text) if orientation is Orientation.HORIZONTAL else (text,)
     return rasterize_text_mask(resource.data, key, phrases=phrases)
 
 

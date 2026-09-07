@@ -7,7 +7,19 @@ import tomllib
 from mojit.config.models import ConfigOverrides, ConfigValidationError
 from mojit.core.models import Orientation
 
-_ALLOWED_KEYS = frozenset({"effect", "orientation", "font", "fps", "margin", "seed"})
+_ALLOWED_KEYS = frozenset(
+    {
+        "effect",
+        "orientation",
+        "font",
+        "fps",
+        "margin",
+        "seed",
+        "scene",
+        "scene_version",
+        "layers",
+    }
+)
 
 
 class ConfigSyntaxError(ValueError):
@@ -40,12 +52,27 @@ def parse_toml_config(document: str | bytes) -> ConfigOverrides:
     if unknown:
         raise ConfigValidationError(f"unknown config key: {unknown[0]}")
 
-    for key in ("effect", "orientation", "font"):
+    for key in ("effect", "orientation", "font", "scene"):
         _require_exact_type(values, key, str)
     for key in ("fps", "seed"):
         _require_exact_type(values, key, int)
     if "margin" in values and type(values["margin"]) not in (int, float):
         raise ConfigValidationError("config key 'margin' must be int or float")
+
+    has_version = "scene_version" in values
+    has_layers = "layers" in values
+    if has_version != has_layers:
+        raise ConfigValidationError("scene_version and layers must be provided together")
+    if has_version:
+        _require_exact_type(values, "scene_version", int)
+        if values["scene_version"] != 1:
+            raise ConfigValidationError("scene_version must be 1")
+        if type(values["layers"]) is not list or any(
+            type(layer) is not str for layer in values["layers"]
+        ):
+            raise ConfigValidationError("config key 'layers' must be an array of strings")
+    if "scene" in values and has_version:
+        raise ConfigValidationError("scene and custom scene layers are mutually exclusive")
 
     orientation = None
     if "orientation" in values:
@@ -63,4 +90,6 @@ def parse_toml_config(document: str | bytes) -> ConfigOverrides:
         fps=values.get("fps"),
         margin=values.get("margin"),
         seed=values.get("seed"),
+        scene=values.get("scene"),
+        scene_layers=tuple(values["layers"]) if has_layers else None,
     )

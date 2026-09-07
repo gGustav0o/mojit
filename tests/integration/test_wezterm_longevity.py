@@ -85,6 +85,7 @@ def test_transport_state_remains_bounded_across_one_thousand_frames() -> None:
         fps=15,
         margin=0.08,
         seed=0,
+        scene_id="rainy-night",
     )
 
     def rasterize(data: bytes, key: TypographyKey) -> TextMask:

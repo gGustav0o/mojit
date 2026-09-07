@@ -6,8 +6,9 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
+from pathlib import Path
 
 import pytest
 
@@ -22,6 +23,7 @@ from mojit.config.models import DEFAULT_FPS
 from mojit.core.models import Frame, Orientation, Viewport
 from mojit.core.timing import MAX_FPS
 from mojit.core.typography import require_shaping_capability
+from mojit.scenes.presets import scene_names
 
 pytestmark = pytest.mark.wezterm_live
 
@@ -56,6 +58,7 @@ class PresentationMetrics:
     frames: int = 0
     latency_sum_seconds: float = 0.0
     latency_max_seconds: float = 0.0
+    viewports: list[tuple[int, int]] = field(default_factory=list)
 
 
 class MeasuredBackend:
@@ -67,7 +70,12 @@ class MeasuredBackend:
         self.metrics = PresentationMetrics()
 
     def get_viewport(self) -> Viewport | None:
-        return self._backend.get_viewport()
+        viewport = self._backend.get_viewport()
+        if viewport is not None:
+            dimensions = (viewport.width_px, viewport.height_px)
+            if not self.metrics.viewports or self.metrics.viewports[-1] != dimensions:
+                self.metrics.viewports.append(dimensions)
+        return viewport
 
     def present(self, frame: Frame) -> None:
         if self._fail_after is not None and self.metrics.frames == self._fail_after:
@@ -80,7 +88,12 @@ class MeasuredBackend:
         self.metrics.latency_max_seconds = max(self.metrics.latency_max_seconds, latency)
 
 
-def _request(orientation: Orientation, *, fps: int = DEFAULT_FPS) -> PreparedRun:
+def _request(
+    orientation: Orientation,
+    *,
+    fps: int = DEFAULT_FPS,
+    scene_id: str | None = None,
+) -> PreparedRun:
     font = load_font_resource(FONT_PATH)
     require_shaping_capability()
     return PreparedRun(
@@ -92,6 +105,7 @@ def _request(orientation: Orientation, *, fps: int = DEFAULT_FPS) -> PreparedRun
         fps=fps,
         margin=0.08,
         seed=42,
+        scene_id=scene_id,
     )
 
 
@@ -127,8 +141,9 @@ def _run_bounded(
     fps: int = DEFAULT_FPS,
     fail_after: int | None = None,
     should_stop: Callable[[], bool] | None = None,
+    scene_id: str | None = None,
 ) -> tuple[AnimationResult | None, PresentationMetrics, LiveOutput]:
-    request = _request(orientation, fps=fps)
+    request = _request(orientation, fps=fps, scene_id=scene_id)
     backend, output = _backend()
     measured = MeasuredBackend(backend, fail_after=fail_after)
     result: AnimationResult | None = None
@@ -163,7 +178,26 @@ def test_live_cjk_orientation_and_restore(orientation: Orientation, fps: int) ->
 
 def test_live_runtime_failure_and_repeated_restore() -> None:
     with pytest.raises(RuntimeError, match="injected live runtime failure"):
-        _run_bounded(Orientation.HORIZONTAL, frames=20, fail_after=3)
+        _run_bounded(
+            Orientation.HORIZONTAL,
+            frames=20,
+            fail_after=3,
+            scene_id="rainy-night",
+        )
+    assert _visible_cursor()
+
+
+@pytest.mark.parametrize("scene_id", scene_names())
+def test_live_ambient_scene_and_restore(scene_id: str) -> None:
+    result, metrics, output = _run_bounded(
+        Orientation.HORIZONTAL,
+        frames=12,
+        scene_id=scene_id,
+    )
+    assert result is not None
+    assert result.presented_frames == 12
+    assert metrics.frames == 12
+    assert output.bytes_written > 0
     assert _visible_cursor()
 
 
@@ -205,12 +239,13 @@ def test_live_structured_soak_with_resize_metrics() -> None:
     started = time.perf_counter()
     next_resize_at = started + min(1.0, duration / 4.0)
     resize_attempts = 0
+    resize_directions = ("Left", "Right", "Up", "Down")
 
     def stop_or_resize() -> bool:
         nonlocal next_resize_at, resize_attempts
         now = time.perf_counter()
-        if now >= next_resize_at and resize_attempts < 4:
-            _adjust_pane("Left" if resize_attempts % 2 == 0 else "Right")
+        if now >= next_resize_at and resize_attempts < len(resize_directions):
+            _adjust_pane(resize_directions[resize_attempts])
             resize_attempts += 1
             next_resize_at = started + duration * (resize_attempts + 1) / 5.0
         return now - started >= duration
@@ -218,6 +253,7 @@ def test_live_structured_soak_with_resize_metrics() -> None:
     result, metrics, output = _run_bounded(
         Orientation.HORIZONTAL,
         frames=0,
+        scene_id="rainy-night",
         should_stop=stop_or_resize,
     )
     elapsed = time.perf_counter() - started
@@ -227,33 +263,39 @@ def test_live_structured_soak_with_resize_metrics() -> None:
     assert result.presented_frames == metrics.frames
     assert result.presented_frames > 0
     assert resize_attempts == 4
-    assert result.viewport_changes >= 2
+    assert result.viewport_changes >= 4
+    assert len(metrics.viewports) == result.viewport_changes + 1
+    assert len({width for width, _ in metrics.viewports}) >= 2
+    assert len({height for _, height in metrics.viewports}) >= 2
     assert _visible_cursor()
     total_frame_opportunities = result.presented_frames + result.skipped_frames
-    print(
-        "MOJIT_LIVE_METRICS="
-        + json.dumps(
-            {
-                "target_fps": DEFAULT_FPS,
-                "duration_seconds": elapsed,
-                "frames": metrics.frames,
-                "achieved_fps": metrics.frames / elapsed,
-                "skipped_frames": result.skipped_frames,
-                "skipped_frame_ratio": (
-                    result.skipped_frames / total_frame_opportunities
-                    if total_frame_opportunities
-                    else 0.0
-                ),
-                "average_present_ms": (metrics.latency_sum_seconds / metrics.frames * 1_000.0),
-                "maximum_present_ms": metrics.latency_max_seconds * 1_000.0,
-                "terminal_bytes": output.bytes_written,
-                "maximum_write_bytes": output.max_write,
-                "viewport_changes": result.viewport_changes,
-                "resize_attempts": resize_attempts,
-                "wezterm_working_set_before": working_set_before,
-                "wezterm_working_set_after": working_set_after,
-                "wezterm_working_set_delta": working_set_after - working_set_before,
-            },
-            sort_keys=True,
-        )
+    metrics_json = json.dumps(
+        {
+            "target_fps": DEFAULT_FPS,
+            "duration_seconds": elapsed,
+            "frames": metrics.frames,
+            "achieved_fps": metrics.frames / elapsed,
+            "skipped_frames": result.skipped_frames,
+            "skipped_frame_ratio": (
+                result.skipped_frames / total_frame_opportunities
+                if total_frame_opportunities
+                else 0.0
+            ),
+            "average_present_ms": (metrics.latency_sum_seconds / metrics.frames * 1_000.0),
+            "maximum_present_ms": metrics.latency_max_seconds * 1_000.0,
+            "terminal_bytes": output.bytes_written,
+            "maximum_write_bytes": output.max_write,
+            "viewport_changes": result.viewport_changes,
+            "viewports": metrics.viewports,
+            "resize_attempts": resize_attempts,
+            "resize_directions": resize_directions,
+            "wezterm_working_set_before": working_set_before,
+            "wezterm_working_set_after": working_set_after,
+            "wezterm_working_set_delta": working_set_after - working_set_before,
+        },
+        sort_keys=True,
     )
+    print("MOJIT_LIVE_METRICS=" + metrics_json)
+    metrics_path = os.environ.get("MOJIT_LIVE_METRICS_PATH")
+    if metrics_path:
+        Path(metrics_path).write_text(metrics_json, encoding="utf-8")

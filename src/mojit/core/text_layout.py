@@ -239,9 +239,7 @@ def horizontal_line_candidates(
         selected = _balanced_boundaries(clusters, boundaries, line_count)
         lines = _lines_at(clusters, selected)
         if any(
-            not line
-            or line.isspace()
-            or _text_weight(line) < MINIMUM_AUTO_LINE_WEIGHT
+            not line or line.isspace() or _text_weight(line) < MINIMUM_AUTO_LINE_WEIGHT
             for line in lines
         ):
             continue

@@ -11,6 +11,7 @@ from mojit.config.models import (
     DEFAULT_FPS,
     DEFAULT_MARGIN,
     DEFAULT_ORIENTATION,
+    DEFAULT_SCENE,
     DEFAULT_SEED,
     ConfigOverrides,
     ConfigValidationError,
@@ -55,6 +56,8 @@ def resolve_config(
     fps = cli.fps if cli.fps is not None else file.fps
     margin = cli.margin if cli.margin is not None else file.margin
     seed = cli.seed if cli.seed is not None else file.seed
+    scene = cli.scene if cli.scene is not None else file.scene
+    scene_layers = None if cli.scene is not None else file.scene_layers
 
     return ResolvedConfig(
         effect=effect if effect is not None else DEFAULT_EFFECT,
@@ -63,5 +66,7 @@ def resolve_config(
         fps=fps if fps is not None else DEFAULT_FPS,
         margin=margin if margin is not None else DEFAULT_MARGIN,
         seed=seed if seed is not None else DEFAULT_SEED,
+        scene=scene if scene is not None else DEFAULT_SCENE,
+        scene_layers=scene_layers,
         debug=debug,
     )

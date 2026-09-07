@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from mojit.core.compositor import RgbaColor, alpha_composite, blur_mask, colorize_mask
+from mojit.core.compositor import RgbaColor, blur_mask, composite_colorized_masks
 from mojit.core.models import Frame, RenderContext, TextMask
 from mojit.effects.api import EffectConfig, validate_effect_inputs
 
@@ -22,7 +22,10 @@ def render_neon(mask: TextMask, context: RenderContext, config: EffectConfig) ->
     outer_radius = max(inner_radius + 1.0, short_side * (0.018 + 0.006 * phase))
     outer_alpha = round(72 + 48 * phase)
 
-    outer = colorize_mask(blur_mask(source, outer_radius), RgbaColor(*_OUTER_RGB, outer_alpha))
-    inner = colorize_mask(blur_mask(source, inner_radius), _INNER)
-    core = colorize_mask(source, _CORE)
-    return alpha_composite(alpha_composite(outer, inner), core)
+    return composite_colorized_masks(
+        (
+            (blur_mask(source, outer_radius), RgbaColor(*_OUTER_RGB, outer_alpha)),
+            (blur_mask(source, inner_radius), _INNER),
+            (source, _CORE),
+        )
+    )

@@ -6,7 +6,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from mojit.application.request import PreparedRun
-from mojit.core.models import Orientation
+from mojit.core.models import MAX_SCENE_LAYERS, Orientation
 
 
 def _request(**changes: object) -> PreparedRun:
@@ -53,8 +53,21 @@ def test_prepared_run_accepts_fps_boundaries(fps: int) -> None:
         ("margin", 0.5),
         ("seed", 2**63),
         ("debug", 1),
+        ("scene_id", "Rainy Night"),
+        ("scene_layers", ("stars",)),
+        ("scene_layers", ("unknown", "text")),
     ],
 )
 def test_prepared_run_rejects_invalid_state(field: str, value: object) -> None:
     with pytest.raises((TypeError, ValueError)):
         _request(**{field: value})
+
+
+def test_prepared_run_rejects_preset_and_custom_scene_together() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        _request(scene_id="space", scene_layers=("text",))
+
+
+def test_prepared_run_rejects_a_custom_scene_above_the_layer_limit() -> None:
+    with pytest.raises(ValueError, match=str(MAX_SCENE_LAYERS)):
+        _request(scene_layers=("stars",) * MAX_SCENE_LAYERS + ("text",))

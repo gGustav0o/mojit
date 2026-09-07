@@ -1,5 +1,58 @@
 # Architecture boundaries
 
+Status: current boundaries through Phase 10 plus constraints for post-v1 evolution.
+
+The detailed sections below describe the implemented v1 architecture and remain
+constraints unless deliberately superseded. Product direction is defined in
+[PRODUCT.md](PRODUCT.md) and sequencing in [ROADMAP.md](ROADMAP.md).
+
+## Scene-engine evolution direction
+
+Phase 7 introduced scene composition without changing terminal transport. The current
+data flow is:
+
+```text
+Input / Config
+    ↓
+Scene description
+    ↓
+Scene / ordered layers
+    ↓
+Pure composition
+    ↓
+Frame
+    ↓
+Application scheduling
+    ↓
+Terminal backend
+```
+
+This remains an incremental direction, not a frozen class diagram. Introduce only the
+types required by the active roadmap increment. In particular:
+
+- existing text typography and effects should become reusable scene building blocks
+  rather than be discarded;
+- independent visual layers must compose before terminal presentation and must not
+  know about WezTerm, subprocesses, clocks, files, or terminal state;
+- deterministic inputs (scene/config, viewport, frame/time, seed) should reproduce
+  deterministic frame output;
+- scene composition must not require an ECS, plugin system, generic scene graph, or
+  dependency-injection framework;
+- the application remains responsible for time, resize observation, bounded caches,
+  and presentation cadence;
+- terminal transport remains an adapter boundary; Windows + WezTerm remains the
+  concrete primary backend during the active roadmap;
+- do not extract a generic cross-terminal hierarchy in anticipation of Kitty. A
+  native Kitty-terminal backend should be designed only when it becomes active work
+  and can provide real second-backend evidence.
+
+Important terminology: the existing WezTerm backend can use the **Kitty Graphics
+Protocol** as a wire protocol. That does not make the Kitty terminal application a
+supported backend and does not authorize Kitty-specific development in the current
+roadmap.
+
+## Implemented v1 boundaries
+
 `mojit` is a small modular monolith built around Functional Core / Imperative Shell.
 The physical layout is intended to enforce these dependency directions:
 
@@ -8,7 +61,9 @@ config.models ────────────────► core.models
 config.resolve ───────────────► config.models
 core ─────────────────────────► no project layer
 effects ──────────────────────► core
-application ──────────────────► core + effects
+layers ───────────────────────► core
+scenes ───────────────────────► core + effects + layers
+application ──────────────────► core + effects + scenes
 adapters ─────────────────────► core models
 cli (composition root) ───────► application + adapters + config
 bootstrap ────────────────────► native runtime, then cli
@@ -19,6 +74,8 @@ Forbidden dependencies:
 - `core` and `effects` must not import `application`, `adapters`, or `cli`;
 - `core` must not accept `ResolvedConfig`; application maps it to narrow core options;
 - effects must not access terminal state, files, clocks, or global random state;
+- procedural layers must not access terminal state, files, clocks, environment, or
+  global random state;
 - typography must not own mutable caches;
 - the WezTerm adapter must not contain layout or effect policy;
 - experimental `spikes` code must not be imported by `src/mojit`.
@@ -65,6 +122,58 @@ immutable `TextMask`/`Frame` values, use clipped transparent edges, and return n
 immutable values. Pillow owns LANCZOS resize, Gaussian blur, and source-over alpha;
 NumPy owns clipped translation, band displacement, and channel assembly. Effects do
 not duplicate these operations.
+
+Phase 7 adds `core.scene` as the pure composition boundary. An immutable non-empty
+`Scene` stores structural `Layer` values in explicit back-to-front order. Every layer
+receives the same validated `RenderContext` and must return an immutable full-viewport
+`Frame`; the boundary rejects non-frame and mismatched-viewport results before
+presentation. The first contribution is retained unchanged. Multi-layer scenes use
+one validated in-place Pillow source-over pass and create one immutable result,
+avoiding an immutable full-frame copy after every pairwise blend. This makes z-order
+and viewport clipping explicit without a retained scene graph, ECS, plugin API, or
+backend knowledge.
+
+A companion batch primitive colorizes and composites multiple masks directly. Neon
+uses it for outer glow, inner glow, and glyph core, preserving the established bytes
+without materializing three intermediate immutable RGBA frames.
+
+`TextEffectLayer` adapts the existing text mask/effect/config triple to this structural
+contract. `RenderSession` still owns the one-entry typography cache and deterministic
+context construction, but now renders the v1 request as a one-layer `Scene`. The
+single-layer result is byte-equivalent to the direct v1 effect output. Future
+procedural layers may capture their own immutable visual configuration and seed, but
+must continue to derive each frame solely from that configuration and the explicit
+render context.
+
+Phase 8 implements `layers` as a sibling of `effects` that depends only on the core
+and side-effect-free third-party drawing/math libraries. `RainLayer`, `StarsLayer`,
+and `SnowLayer` are frozen visual configurations. They rebuild a local particle field
+for each frame from a signed 64-bit seed, stable layer identifier, current viewport,
+and explicit elapsed time. They retain no simulation or viewport history, use no
+global RNG, and cap each generated field at 4,096 particles. Density is
+viewport-relative below that cap. Resize therefore replaces transient frame data
+rather than migrating state, and rendering an earlier viewport/time again reproduces
+the same frame.
+
+Phase 9 currently adds a small explicit built-in scene registry as a composition
+layer above core/effects/procedural layers. `rainy-night`, `snowfall`, and `space`
+are stable user-facing names mapped to ordinary `Scene` construction functions;
+there is no discovery plugin mechanism. Preset-specific sub-seeds are derived from
+the resolved run seed and stable layer names. The CLI validates a selected name
+before text, font, shaping, or terminal work, while `RenderSession` remains the owner
+of the viewport-specific text layer. CLI selection overrides the optional root TOML
+`scene` key. The legacy absence of a scene continues to build exactly one text layer.
+
+Custom scene TOML is a strict versioned product representation rather than a dump of
+implementation objects. Version 1 accepts an ordered `layers` array containing
+`stars`, `rain`, `snow`, and exactly one `text` entry, with at most 16 entries so one
+bounded config file cannot amplify into an unbounded set of full-viewport frames.
+The root `seed` derives stable per-position ambient sub-seeds. Config parsing rejects
+unsupported versions, unknown layers, incomplete version/layer pairs, and
+preset/custom ambiguity. `ResolvedConfig` then carries only the validated tuple; the
+composition root copies it into `PreparedRun`, and the scene package maps names to
+frozen layer values. Existing config files omit both `scene` and `layers` and retain
+the exact one-text-layer path.
 
 Effects are plain callables over `TextMask`, `RenderContext`, and frozen
 `EffectConfig(seed)`. Continuous animation uses deterministic elapsed time; glitch

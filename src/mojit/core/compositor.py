@@ -150,10 +150,7 @@ def colorize_mask(mask: TextMask, rgba_color: RgbaColor) -> Frame:
     if not isinstance(rgba_color, RgbaColor):
         raise CompositorError("rgba_color must be an RgbaColor")
 
-    alpha = (
-        source.alpha.astype(np.uint16) * np.uint16(rgba_color.alpha) + np.uint16(127)
-    ) // np.uint16(255)
-    alpha = alpha.astype(np.uint8)
+    alpha = _colorized_alpha(source, rgba_color)
     rgba = np.zeros((source.height, source.width, 4), dtype=np.uint8)
     visible = alpha != 0
     rgba[visible, 0] = rgba_color.red
@@ -161,6 +158,13 @@ def colorize_mask(mask: TextMask, rgba_color: RgbaColor) -> Frame:
     rgba[visible, 2] = rgba_color.blue
     rgba[..., 3] = alpha
     return Frame(source.width, source.height, rgba)
+
+
+def _colorized_alpha(mask: TextMask, color: RgbaColor) -> np.ndarray:
+    alpha = (mask.alpha.astype(np.uint16) * np.uint16(color.alpha) + np.uint16(127)) // np.uint16(
+        255
+    )
+    return alpha.astype(np.uint8)
 
 
 def alpha_composite(bottom: Frame, top: Frame) -> Frame:
@@ -174,6 +178,65 @@ def alpha_composite(bottom: Frame, top: Frame) -> Frame:
     rgba = np.array(result, dtype=np.uint8, copy=True)
     rgba[rgba[..., 3] == 0, :3] = 0
     return Frame(lower.width, lower.height, rgba)
+
+
+def alpha_composite_many(frames: Sequence[Frame]) -> Frame:
+    """Composite a non-empty back-to-front frame sequence with one result copy."""
+    if isinstance(frames, (str, bytes)) or not isinstance(frames, Sequence):
+        raise CompositorError("frames must be a sequence")
+    contributions = tuple(frames)
+    if not contributions:
+        raise CompositorError("frames must not be empty")
+    validated = tuple(
+        _require_frame(frame, name=f"frames[{index}]") for index, frame in enumerate(contributions)
+    )
+    dimensions = {(frame.width, frame.height) for frame in validated}
+    if len(dimensions) != 1:
+        raise CompositorError("frames must have equal dimensions")
+    if len(validated) == 1:
+        return validated[0]
+
+    result = Image.fromarray(validated[0].rgba)
+    for overlay in validated[1:]:
+        result.alpha_composite(Image.fromarray(overlay.rgba))
+    rgba = np.array(result, dtype=np.uint8, copy=True)
+    rgba[rgba[..., 3] == 0, :3] = 0
+    return Frame(validated[0].width, validated[0].height, rgba)
+
+
+def composite_colorized_masks(
+    contributions: Sequence[tuple[TextMask, RgbaColor]],
+) -> Frame:
+    """Colorize and source-over composite masks with one immutable RGBA result."""
+    if isinstance(contributions, (str, bytes)) or not isinstance(contributions, Sequence):
+        raise CompositorError("contributions must be a sequence")
+    items = tuple(contributions)
+    if not items:
+        raise CompositorError("contributions must not be empty")
+
+    validated: list[tuple[TextMask, RgbaColor]] = []
+    for index, item in enumerate(items):
+        if not isinstance(item, tuple) or len(item) != 2:
+            raise CompositorError(f"contributions[{index}] must be a mask/color pair")
+        mask = _require_mask(item[0], name=f"contributions[{index}][0]")
+        color = item[1]
+        if not isinstance(color, RgbaColor):
+            raise CompositorError(f"contributions[{index}][1] must be an RgbaColor")
+        validated.append((mask, color))
+
+    dimensions = {(mask.width, mask.height) for mask, _ in validated}
+    if len(dimensions) != 1:
+        raise CompositorError("contribution masks must have equal dimensions")
+    width, height = validated[0][0].width, validated[0][0].height
+    result = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    for mask, color in validated:
+        overlay = Image.new("RGBA", (width, height), (color.red, color.green, color.blue, 0))
+        overlay.putalpha(Image.fromarray(_colorized_alpha(mask, color)))
+        result.alpha_composite(overlay)
+
+    rgba = np.array(result, dtype=np.uint8, copy=True)
+    rgba[rgba[..., 3] == 0, :3] = 0
+    return Frame(width, height, rgba)
 
 
 def merge_color_channels(red: TextMask, green: TextMask, blue: TextMask) -> Frame:

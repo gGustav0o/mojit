@@ -11,9 +11,10 @@ from mojit.adapters.config_file import ConfigFileError
 from mojit.adapters.font_resource import FontResource, FontResourceError
 from mojit.application.input_text import InputTextError
 from mojit.config.models import DEFAULT_FPS, MAX_FPS
-from mojit.core.models import Orientation
+from mojit.core.models import MAX_SCENE_LAYERS, Orientation
 from mojit.core.typography import ShapingUnavailableError
 from mojit.effects.registry import UnknownEffectError
+from mojit.scenes.presets import UnknownSceneError
 
 
 class Pipe(io.StringIO):
@@ -59,6 +60,7 @@ def test_positional_text_with_defaults(tmp_path: Path, fake_preflight: list[Path
     assert request.fps == DEFAULT_FPS
     assert request.margin == 0.08
     assert request.seed == 0
+    assert request.scene_id is None
     assert len(fake_preflight) == 1
 
 
@@ -162,6 +164,81 @@ def test_unknown_effect_fails_before_text_and_font_io(
         )
 
 
+def test_scene_selection_uses_cli_over_config_and_is_prevalidated(
+    tmp_path: Path, fake_preflight: list[Path]
+) -> None:
+    config_path = tmp_path / "scene.toml"
+    config_path.write_text('scene = "space"\n', encoding="utf-8")
+
+    request = cli.prepare_run(
+        cli.parse_cli(["星雨", "--config", str(config_path), "--scene", "rainy-night"]),
+        stdin=PoisonPipe(),
+        environ={},
+        cwd=tmp_path,
+    )
+
+    assert request.scene_id == "rainy-night"
+
+
+def test_versioned_custom_scene_is_prepared_without_terminal_access(
+    tmp_path: Path, fake_preflight: list[Path]
+) -> None:
+    config_path = tmp_path / "custom-scene.toml"
+    config_path.write_text(
+        'scene_version = 1\nlayers = ["stars", "snow", "text"]\n',
+        encoding="utf-8",
+    )
+    request = cli.prepare_run(
+        cli.parse_cli(["雪", "--config", str(config_path)]),
+        stdin=PoisonPipe(),
+        environ={},
+        cwd=tmp_path,
+    )
+    assert request.scene_id is None
+    assert request.scene_layers == ("stars", "snow", "text")
+
+
+def test_oversized_custom_scene_fails_before_font_loading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / "oversized-scene.toml"
+    layers = ", ".join(['"stars"'] * MAX_SCENE_LAYERS + ['"text"'])
+    config_path.write_text(
+        f"scene_version = 1\nlayers = [{layers}]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        cli,
+        "load_font_resource",
+        lambda path: pytest.fail(f"font was loaded for oversized scene: {path}"),
+    )
+
+    with pytest.raises(cli.ConfigValidationError, match=str(MAX_SCENE_LAYERS)):
+        cli.prepare_run(
+            cli.parse_cli(["猫", "--config", str(config_path)]),
+            stdin=PoisonPipe(),
+            environ={},
+            cwd=tmp_path,
+        )
+
+
+def test_unknown_scene_fails_before_text_and_font_io(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        cli,
+        "load_font_resource",
+        lambda path: pytest.fail(f"font was loaded for unknown scene: {path}"),
+    )
+    with pytest.raises(UnknownSceneError, match="unknown"):
+        cli.prepare_run(
+            cli.parse_cli(["--scene", "unknown"]),
+            stdin=PoisonPipe(),
+            environ={},
+            cwd=tmp_path,
+        )
+
+
 def test_malformed_explicit_config_fails_before_font_loading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -243,8 +320,12 @@ def test_list_mode_main_performs_no_config_font_or_shaping_io(
         lambda text: pytest.fail(f"segmentation: {text}"),
     )
 
-    assert cli.main(["--list-effects"]) == 0
-    captured = capsys.readouterr()
-    assert captured.out == "chromatic\nglitch\nneon\npulse\n"
-    assert captured.err == ""
-    assert "\x1b" not in captured.out + captured.err
+    for option, expected in (
+        ("--list-effects", "chromatic\nglitch\nneon\npulse\n"),
+        ("--list-scenes", "rainy-night\nsnowfall\nspace\n"),
+    ):
+        assert cli.main([option]) == 0
+        captured = capsys.readouterr()
+        assert captured.out == expected
+        assert captured.err == ""
+        assert "\x1b" not in captured.out + captured.err

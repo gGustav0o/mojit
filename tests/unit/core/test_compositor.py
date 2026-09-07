@@ -10,8 +10,10 @@ from mojit.core.compositor import (
     HorizontalBandShift,
     RgbaColor,
     alpha_composite,
+    alpha_composite_many,
     blur_mask,
     colorize_mask,
+    composite_colorized_masks,
     merge_color_channels,
     scale_mask_centered,
     translate_mask,
@@ -141,6 +143,66 @@ def test_alpha_composite_rejects_wrong_or_mismatched_frames() -> None:
         alpha_composite(object(), frame)  # type: ignore[arg-type]
     with pytest.raises(CompositorError, match="equal"):
         alpha_composite(frame, other)
+
+
+def test_alpha_composite_many_matches_pairwise_bytes_and_preserves_single_frame() -> None:
+    frames = []
+    for rgba in ((255, 0, 0, 255), (0, 255, 0, 96), (0, 0, 255, 128)):
+        values = np.empty((2, 3, 4), dtype=np.uint8)
+        values[:] = rgba
+        frames.append(Frame(3, 2, values))
+
+    expected = alpha_composite(alpha_composite(frames[0], frames[1]), frames[2])
+    assert alpha_composite_many(frames) == expected
+    assert alpha_composite_many((frames[0],)) is frames[0]
+
+
+def test_alpha_composite_many_rejects_invalid_sequences() -> None:
+    frame = Frame(1, 1, np.zeros((1, 1, 4), dtype=np.uint8))
+    other = Frame(2, 1, np.zeros((1, 2, 4), dtype=np.uint8))
+    with pytest.raises(CompositorError, match="sequence"):
+        alpha_composite_many("bad")  # type: ignore[arg-type]
+    with pytest.raises(CompositorError, match="empty"):
+        alpha_composite_many(())
+    with pytest.raises(CompositorError, match="Frame"):
+        alpha_composite_many((frame, object()))  # type: ignore[arg-type]
+    with pytest.raises(CompositorError, match="equal"):
+        alpha_composite_many((frame, other))
+
+
+def test_composite_colorized_masks_matches_individual_frame_composition() -> None:
+    first_alpha = np.arange(20, dtype=np.uint8).reshape(4, 5) * 12
+    second_alpha = np.flip(first_alpha, axis=1).copy()
+    contributions = (
+        (_mask(first_alpha), RgbaColor(10, 90, 220, 73)),
+        (_mask(second_alpha), RgbaColor(240, 80, 20, 181)),
+        (_mask(np.full((4, 5), 33, dtype=np.uint8)), RgbaColor(255, 255, 255)),
+    )
+    expected = alpha_composite_many(
+        tuple(colorize_mask(mask, color) for mask, color in contributions)
+    )
+
+    actual = composite_colorized_masks(contributions)
+
+    assert actual == expected
+    assert not actual.rgba.flags.writeable
+
+
+def test_composite_colorized_masks_rejects_invalid_contributions() -> None:
+    color = RgbaColor(1, 2, 3)
+    with pytest.raises(CompositorError, match="sequence"):
+        composite_colorized_masks("bad")  # type: ignore[arg-type]
+    with pytest.raises(CompositorError, match="empty"):
+        composite_colorized_masks(())
+    with pytest.raises(CompositorError, match="pair"):
+        composite_colorized_masks(((_mask(),),))  # type: ignore[arg-type]
+    with pytest.raises(CompositorError, match="TextMask"):
+        composite_colorized_masks(((object(), color),))  # type: ignore[arg-type]
+    with pytest.raises(CompositorError, match="RgbaColor"):
+        composite_colorized_masks(((_mask(), object()),))  # type: ignore[arg-type]
+    with pytest.raises(CompositorError, match="equal"):
+        small = TextMask(1, 1, np.zeros((1, 1), dtype=np.uint8))
+        composite_colorized_masks(((_mask(), color), (small, color)))
 
 
 def test_merge_color_channels_normalizes_straight_color() -> None:

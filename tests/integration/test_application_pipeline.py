@@ -8,12 +8,18 @@ import pytest
 from mojit.application.request import PreparedRun
 from mojit.application.runtime import RenderSession, run_animation
 from mojit.config.models import DEFAULT_FPS
-from mojit.core.models import Frame, Orientation, TextMask, Viewport
+from mojit.core.models import Frame, Orientation, RenderContext, TextMask, Viewport
 from mojit.core.typography import TypographyKey
-from mojit.effects.registry import effect_names
+from mojit.effects.api import EffectConfig
+from mojit.effects.registry import effect_names, get_effect
 
 
-def _request(effect_id: str, *, orientation: Orientation = Orientation.HORIZONTAL) -> PreparedRun:
+def _request(
+    effect_id: str,
+    *,
+    orientation: Orientation = Orientation.HORIZONTAL,
+    scene_id: str | None = None,
+) -> PreparedRun:
     data = b"synthetic-font"
     return PreparedRun(
         text="電脳世界",
@@ -24,6 +30,7 @@ def _request(effect_id: str, *, orientation: Orientation = Orientation.HORIZONTA
         fps=DEFAULT_FPS,
         margin=0.08,
         seed=42,
+        scene_id=scene_id,
     )
 
 
@@ -60,6 +67,57 @@ def test_prepared_run_renders_all_effects_without_system_dependencies(
     assert first == repeated == independent
     assert (first.width, first.height) == (31, 25)
     assert not first.rgba.flags.writeable
+
+
+def test_legacy_text_request_is_preserved_as_a_single_layer_scene() -> None:
+    request = _request("glitch")
+    viewport = Viewport(31, 25)
+    frame_index = 13
+    key = TypographyKey(
+        text=request.text,
+        font_fingerprint=request.font_fingerprint,
+        orientation=request.orientation,
+        viewport=viewport,
+        margin=request.margin,
+    )
+    mask = _synthetic_rasterizer(request.font_data, key)
+    expected = get_effect(request.effect_id)(
+        mask,
+        RenderContext(viewport, frame_index, frame_index / request.fps),
+        EffectConfig(request.seed),
+    )
+
+    actual = RenderSession(request, rasterizer=_synthetic_rasterizer).render(viewport, frame_index)
+
+    assert actual == expected
+
+
+def test_built_in_scene_runs_deterministically_through_render_session() -> None:
+    viewport = Viewport(64, 48)
+    request = _request("neon", orientation=Orientation.VERTICAL, scene_id="snowfall")
+    first = RenderSession(request, rasterizer=_synthetic_rasterizer).render(viewport, 8)
+    second = RenderSession(request, rasterizer=_synthetic_rasterizer).render(viewport, 8)
+
+    assert first == second
+
+
+def test_custom_ordered_scene_runs_deterministically_through_render_session() -> None:
+    viewport = Viewport(64, 48)
+    base = _request("neon")
+    request = PreparedRun(
+        text=base.text,
+        effect_id=base.effect_id,
+        orientation=base.orientation,
+        font_data=base.font_data,
+        font_fingerprint=base.font_fingerprint,
+        fps=base.fps,
+        margin=base.margin,
+        seed=base.seed,
+        scene_layers=("stars", "rain", "text"),
+    )
+    first = RenderSession(request, rasterizer=_synthetic_rasterizer).render(viewport, 8)
+    second = RenderSession(request, rasterizer=_synthetic_rasterizer).render(viewport, 8)
+    assert first == second
 
 
 class _Clock:

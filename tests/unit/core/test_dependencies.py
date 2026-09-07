@@ -10,6 +10,8 @@ CONFIG_ROOT = SOURCE_ROOT / "config"
 APPLICATION_REQUEST = SOURCE_ROOT / "application" / "request.py"
 APPLICATION_ROOT = SOURCE_ROOT / "application"
 EFFECTS_ROOT = SOURCE_ROOT / "effects"
+LAYERS_ROOT = SOURCE_ROOT / "layers"
+SCENES_ROOT = SOURCE_ROOT / "scenes"
 WEZTERM_ROOT = SOURCE_ROOT / "adapters" / "wezterm"
 WEZTERM_BACKEND = WEZTERM_ROOT / "backend.py"
 WEZTERM_VIEWPORT = WEZTERM_ROOT / "viewport.py"
@@ -28,6 +30,21 @@ FORBIDDEN_EFFECT_PREFIXES = (
     "mojit.cli",
 )
 FORBIDDEN_EFFECT_MODULES = {"os", "pathlib", "random", "subprocess", "time"}
+FORBIDDEN_LAYER_PREFIXES = (
+    "mojit.application",
+    "mojit.adapters",
+    "mojit.config",
+    "mojit.effects",
+    "mojit.cli",
+)
+FORBIDDEN_LAYER_MODULES = {"os", "pathlib", "random", "subprocess", "time"}
+FORBIDDEN_SCENE_PREFIXES = (
+    "mojit.application",
+    "mojit.adapters",
+    "mojit.config",
+    "mojit.cli",
+)
+FORBIDDEN_SCENE_MODULES = {"os", "pathlib", "random", "subprocess", "time"}
 FORBIDDEN_WEZTERM_PREFIXES = ("mojit.application", "mojit.config", "mojit.effects", "mojit.cli")
 
 
@@ -66,8 +83,7 @@ def test_budoux_dependency_is_isolated_to_its_adapter() -> None:
     importers = []
     for path in SOURCE_ROOT.rglob("*.py"):
         if any(
-            imported == "budoux" or imported.startswith("budoux.")
-            for imported in _imports(path)
+            imported == "budoux" or imported.startswith("budoux.") for imported in _imports(path)
         ):
             importers.append(path.relative_to(SOURCE_ROOT).as_posix())
 
@@ -128,6 +144,34 @@ def test_concrete_effects_do_not_import_registry() -> None:
             continue
         if "mojit.effects.registry" in _imports(path):
             violations.append(str(path.relative_to(PROJECT_ROOT)))
+
+    assert violations == []
+
+
+def test_layers_depend_only_on_core_and_side_effect_free_libraries() -> None:
+    violations: list[str] = []
+    for path in LAYERS_ROOT.rglob("*.py"):
+        for imported in _imports(path):
+            top_level = imported.split(".")[0]
+            if (
+                imported.startswith(FORBIDDEN_LAYER_PREFIXES)
+                or top_level in FORBIDDEN_LAYER_MODULES
+            ):
+                violations.append(f"{path.relative_to(PROJECT_ROOT)} -> {imported}")
+
+    assert violations == []
+
+
+def test_scene_presets_do_not_import_application_config_or_shell_io() -> None:
+    violations: list[str] = []
+    for path in SCENES_ROOT.rglob("*.py"):
+        for imported in _imports(path):
+            top_level = imported.split(".")[0]
+            if (
+                imported.startswith(FORBIDDEN_SCENE_PREFIXES)
+                or top_level in FORBIDDEN_SCENE_MODULES
+            ):
+                violations.append(f"{path.relative_to(PROJECT_ROOT)} -> {imported}")
 
     assert violations == []
 

@@ -22,8 +22,19 @@ Accepted records:
 - [0004 — Default CJK font](0004-default-cjk-font.md)
 - [0005 — Cell transport and target FPS](0005-cell-transport-and-fps.md)
 - [0006 — Current-user installation](0006-current-user-installation.md)
+- [0007 — Ordered full-viewport scene composition](0007-ordered-scene-composition.md)
+- [0008 — Stateless procedural ambience](0008-stateless-procedural-ambience.md)
+- [0009 — Versioned scene configuration](0009-versioned-scene-configuration.md)
 
 Superseded records:
 
 - [0001 — WezTerm graphics protocol](0001-terminal-graphics-protocol.md), superseded
   by ADR 0005.
+
+## Post-v1 ADR policy
+
+Completed ADRs are historical decisions and must not be edited merely because the
+product direction grows. When a durable new decision supersedes or narrows an
+accepted ADR, create the next consecutively numbered ADR and link the relationship
+explicitly. Product ideas and roadmap items do not need ADRs until they become actual
+architectural decisions.

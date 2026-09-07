@@ -10,6 +10,8 @@ from numbers import Integral, Real
 import numpy as np
 from numpy.typing import NDArray
 
+MAX_SCENE_LAYERS = 16
+
 
 class ModelValidationError(ValueError):
     """A core value does not satisfy its public invariant."""

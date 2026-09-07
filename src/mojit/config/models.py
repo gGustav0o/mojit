@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from mojit.core.models import Orientation
+from mojit.core.models import MAX_SCENE_LAYERS, Orientation
 from mojit.core.timing import MAX_FPS, MIN_FPS
 
 DEFAULT_EFFECT = "neon"
@@ -16,11 +16,13 @@ DEFAULT_FONT = Path("C:/Windows/Fonts/YuGothB.ttc")
 DEFAULT_FPS = 8
 DEFAULT_MARGIN = 0.08
 DEFAULT_SEED = 0
+DEFAULT_SCENE: str | None = None
 
 MIN_SEED = -(2**63)
 MAX_SEED = 2**63 - 1
 
 _EFFECT_ID = re.compile(r"[a-z][a-z0-9_-]*\Z")
+_SCENE_LAYER_IDS = frozenset({"rain", "snow", "stars", "text"})
 
 
 class ConfigValidationError(ValueError):
@@ -30,6 +32,25 @@ class ConfigValidationError(ValueError):
 def validate_effect(value: object) -> str:
     if not isinstance(value, str) or _EFFECT_ID.fullmatch(value) is None:
         raise ConfigValidationError("effect must match [a-z][a-z0-9_-]*")
+    return value
+
+
+def validate_scene(value: object) -> str:
+    if not isinstance(value, str) or _EFFECT_ID.fullmatch(value) is None:
+        raise ConfigValidationError("scene must match [a-z][a-z0-9_-]*")
+    return value
+
+
+def validate_scene_layers(value: object) -> tuple[str, ...]:
+    if not isinstance(value, tuple) or not value:
+        raise ConfigValidationError("scene layers must be a non-empty tuple")
+    if len(value) > MAX_SCENE_LAYERS:
+        raise ConfigValidationError(f"scene layers must not exceed {MAX_SCENE_LAYERS} entries")
+    if any(type(layer) is not str or layer not in _SCENE_LAYER_IDS for layer in value):
+        available = ", ".join(sorted(_SCENE_LAYER_IDS))
+        raise ConfigValidationError(f"scene layers must be one of: {available}")
+    if value.count("text") != 1:
+        raise ConfigValidationError("scene layers must contain exactly one text layer")
     return value
 
 
@@ -80,6 +101,8 @@ class ConfigOverrides:
     fps: int | None = None
     margin: float | None = None
     seed: int | None = None
+    scene: str | None = None
+    scene_layers: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         if self.effect is not None:
@@ -94,6 +117,12 @@ class ConfigOverrides:
             object.__setattr__(self, "margin", validate_margin(self.margin))
         if self.seed is not None:
             object.__setattr__(self, "seed", validate_seed(self.seed))
+        if self.scene is not None:
+            object.__setattr__(self, "scene", validate_scene(self.scene))
+        if self.scene_layers is not None:
+            object.__setattr__(self, "scene_layers", validate_scene_layers(self.scene_layers))
+        if self.scene is not None and self.scene_layers is not None:
+            raise ConfigValidationError("scene and custom scene layers are mutually exclusive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,6 +136,8 @@ class ResolvedConfig:
     margin: float
     seed: int
     debug: bool = False
+    scene: str | None = None
+    scene_layers: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "effect", validate_effect(self.effect))
@@ -116,5 +147,11 @@ class ResolvedConfig:
         object.__setattr__(self, "fps", validate_fps(self.fps))
         object.__setattr__(self, "margin", validate_margin(self.margin))
         object.__setattr__(self, "seed", validate_seed(self.seed))
+        if self.scene is not None:
+            object.__setattr__(self, "scene", validate_scene(self.scene))
+        if self.scene_layers is not None:
+            object.__setattr__(self, "scene_layers", validate_scene_layers(self.scene_layers))
+        if self.scene is not None and self.scene_layers is not None:
+            raise ConfigValidationError("scene and custom scene layers are mutually exclusive")
         if not isinstance(self.debug, bool):
             raise ConfigValidationError("debug must be a boolean")

@@ -28,6 +28,28 @@ class EffectConfig:
 Effect = Callable[[TextMask, RenderContext, EffectConfig], Frame]
 
 
+@dataclass(frozen=True, slots=True)
+class TextEffectLayer:
+    """Adapt one v1 text mask/effect pair to the scene-layer contract."""
+
+    mask: TextMask
+    effect: Effect
+    config: EffectConfig
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.mask, TextMask):
+            raise EffectInputError("mask must be a TextMask")
+        if not callable(self.effect):
+            raise EffectInputError("effect must be callable")
+        if not isinstance(self.config, EffectConfig):
+            raise EffectInputError("config must be an EffectConfig")
+
+    def render(self, context: RenderContext) -> Frame:
+        """Render the captured text contribution for an explicit context."""
+        mask, validated_context, config = validate_effect_inputs(self.mask, context, self.config)
+        return self.effect(mask, validated_context, config)
+
+
 def validate_effect_inputs(
     mask: object,
     context: object,

@@ -27,6 +27,8 @@ def test_parser_accepts_every_rendering_flag() -> None:
             "42",
             "--config",
             "settings.toml",
+            "--scene",
+            "rainy-night",
             "--debug",
         ]
     )
@@ -41,6 +43,7 @@ def test_parser_accepts_every_rendering_flag() -> None:
     assert parsed.overrides.fps == 15
     assert parsed.overrides.margin == 0.1
     assert parsed.overrides.seed == 42
+    assert parsed.overrides.scene == "rainy-night"
 
 
 def test_horizontal_is_an_explicit_override() -> None:
@@ -60,6 +63,7 @@ def test_text_is_optional_for_stdin_resolution() -> None:
         ["--margin", "0.5"],
         ["--seed", str(2**63)],
         ["--effect", "Neon"],
+        ["--scene", "Rainy Night"],
         ["--config", "-"],
         ["--unknown"],
     ],
@@ -80,6 +84,7 @@ def test_invalid_cli_is_mapped_to_usage_error(argv: list[str]) -> None:
         ["--fps", "8"],
         ["--margin", "0.1"],
         ["--seed", "0"],
+        ["--scene", "space"],
     ],
 )
 def test_list_mode_rejects_render_inputs(extra: list[str]) -> None:
@@ -93,11 +98,41 @@ def test_list_mode_allows_debug_only() -> None:
     assert parsed.debug is True
 
 
-def test_help_is_successful(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["--help"]) == 0
-    output = capsys.readouterr().out
-    assert "usage: mojit" in output
-    assert "target frame rate, 1..15 (default: 8)" in output
+@pytest.mark.parametrize("help_option", ["-h", "--help"])
+def test_help_documents_complete_cli_contract(
+    help_option: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main([help_option]) == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    normalized_help = " ".join(captured.out.split())
+    for expected in (
+        "usage: mojit",
+        "Display large animated Unicode text in WezTerm.",
+        "TEXT",
+        "-h, --help",
+        "-e, --effect ID",
+        "--vertical",
+        "--horizontal",
+        "--font PATH",
+        "--fps FPS",
+        "--margin RATIO",
+        "--seed INTEGER",
+        "--config PATH",
+        "--list-effects",
+        "--scene NAME",
+        "--list-scenes",
+        "--debug",
+        "built-in default: neon",
+        "target presentation rate, 1..15 frames/s (built-in default: 8)",
+        "0 <= RATIO < 0.5",
+        "Configuration precedence:",
+        "command line > --config PATH > %APPDATA%\\mojit\\config.toml",
+        "Examples:",
+        "Exit status:",
+    ):
+        assert expected in normalized_help
 
 
 def test_usage_error_has_no_traceback(capsys: pytest.CaptureFixture[str]) -> None:
@@ -122,6 +157,20 @@ def test_list_mode_does_not_touch_stdin(
     assert main(["--list-effects"]) == 0
     captured = capsys.readouterr()
     assert captured.out == "chromatic\nglitch\nneon\npulse\n"
+    assert captured.err == ""
+
+
+def test_scene_list_mode_is_sorted_and_does_not_touch_stdin(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class PoisonStdin(io.StringIO):
+        def reconfigure(self, **kwargs: object) -> None:
+            raise AssertionError("stdin was reconfigured")
+
+    monkeypatch.setattr("sys.stdin", PoisonStdin())
+    assert main(["--list-scenes"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "rainy-night\nsnowfall\nspace\n"
     assert captured.err == ""
 
 

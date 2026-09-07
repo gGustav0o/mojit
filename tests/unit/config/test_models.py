@@ -13,7 +13,7 @@ from mojit.config.models import (
     ConfigValidationError,
     ResolvedConfig,
 )
-from mojit.core.models import Orientation
+from mojit.core.models import MAX_SCENE_LAYERS, Orientation
 
 
 @pytest.mark.parametrize("fps", [MIN_FPS, DEFAULT_FPS, MAX_FPS])
@@ -58,6 +58,32 @@ def test_overrides_accept_effect_identifiers(effect: str) -> None:
 def test_overrides_reject_invalid_effect_identifiers(effect: object) -> None:
     with pytest.raises(ConfigValidationError):
         ConfigOverrides(effect=effect)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("scene", ["rainy-night", "space", "snowfall_2"])
+def test_overrides_accept_scene_identifiers(scene: str) -> None:
+    assert ConfigOverrides(scene=scene).scene == scene
+
+
+@pytest.mark.parametrize("scene", ["", "Rain", "two words", 1])
+def test_overrides_reject_invalid_scene_identifiers(scene: object) -> None:
+    with pytest.raises(ConfigValidationError):
+        ConfigOverrides(scene=scene)  # type: ignore[arg-type]
+
+
+def test_custom_scene_layers_are_strict_ordered_and_exclusive_with_preset() -> None:
+    layers = ("stars", "rain", "text")
+    assert ConfigOverrides(scene_layers=layers).scene_layers == layers
+    maximum = ("stars",) * (MAX_SCENE_LAYERS - 1) + ("text",)
+    assert ConfigOverrides(scene_layers=maximum).scene_layers == maximum
+    with pytest.raises(ConfigValidationError, match="exactly one text"):
+        ConfigOverrides(scene_layers=("stars",))
+    with pytest.raises(ConfigValidationError, match="one of"):
+        ConfigOverrides(scene_layers=("unknown", "text"))
+    with pytest.raises(ConfigValidationError, match=str(MAX_SCENE_LAYERS)):
+        ConfigOverrides(scene_layers=("stars",) * MAX_SCENE_LAYERS + ("text",))
+    with pytest.raises(ConfigValidationError, match="mutually exclusive"):
+        ConfigOverrides(scene="space", scene_layers=("text",))
 
 
 @pytest.mark.parametrize("font", ["", "   ", 1])

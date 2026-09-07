@@ -46,6 +46,7 @@ def test_resolution_uses_defaults() -> None:
         ("fps", 10, 15),
         ("margin", 0.0, 0.2),
         ("seed", 42, 0),
+        ("scene", "space", "rainy-night"),
     ],
 )
 def test_cli_precedes_file_for_every_field(
@@ -92,3 +93,22 @@ def test_config_font_requires_its_source_directory() -> None:
 def test_resolution_requires_absolute_context_paths() -> None:
     with pytest.raises(ConfigValidationError, match="cwd"):
         resolve_config(ConfigOverrides(), ConfigOverrides(), cwd=Path("relative"), config_dir=None)
+
+
+def test_custom_scene_layers_resolve_from_file_and_cli_preset_replaces_them() -> None:
+    layers = ("stars", "snow", "text")
+    custom = resolve_config(
+        ConfigOverrides(),
+        ConfigOverrides(scene_layers=layers),
+        cwd=CWD,
+        config_dir=CONFIG_DIR,
+    )
+    preset = resolve_config(
+        ConfigOverrides(scene="space"),
+        ConfigOverrides(scene_layers=layers),
+        cwd=CWD,
+        config_dir=CONFIG_DIR,
+    )
+    assert custom.scene_layers == layers
+    assert preset.scene == "space"
+    assert preset.scene_layers is None

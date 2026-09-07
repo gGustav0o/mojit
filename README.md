@@ -1,23 +1,28 @@
 # mojit
 
-`mojit` is a Windows 11 / WezTerm CLI for displaying large animated Unicode text.
+`mojit` is a Windows-first terminal visual engine. The released v1 baseline is a
+Windows 11 / WezTerm CLI for displaying large animated Unicode text; current
+development is evolving that proven renderer into a lightweight composable terminal
+scene and ambience engine with Japanese typography as a first-class visual primitive.
 
-The product requirements are in [SPEC.md](SPEC.md), and dependency boundaries are
-recorded in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For current development, read:
 
-Phase 0 results and decisions are summarized in
-[docs/PHASE_0_REPORT.md](docs/PHASE_0_REPORT.md). Phase 1's deterministic typography
-core is complete; see [the plan](docs/PHASE_1_PLAN.md) and
-[the report](docs/PHASE_1_REPORT.md). Phase 2's configuration and input boundary is
-also complete; see [the plan](docs/PHASE_2_PLAN.md) and
-[the report](docs/PHASE_2_REPORT.md). Experimental code remains isolated under
-`spikes/`. Phase 3's pure compositor and deterministic effects are complete; see
-[the plan](docs/PHASE_3_PLAN.md) and [the report](docs/PHASE_3_REPORT.md). Phase 4's
-bounded application orchestration is complete; see [the plan](docs/PHASE_4_PLAN.md)
-and [the report](docs/PHASE_4_REPORT.md). Phase 5's production WezTerm transport and
-terminal lifecycle are complete; see [the report](docs/PHASE_5_REPORT.md). Phase 6's
-reproducible Windows distribution is also complete; see
-[the plan](docs/PHASE_6_PLAN.md) and [the report](docs/PHASE_6_REPORT.md).
+- [docs/PRODUCT.md](docs/PRODUCT.md) — what the project is becoming;
+- [docs/ROADMAP.md](docs/ROADMAP.md) — what to build next;
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — dependency boundaries and evolution
+  rules;
+- [AGENTS.md](AGENTS.md) — autonomous-agent operating rules.
+
+[SPEC.md](SPEC.md) is the implemented **v1 compatibility contract**, not the complete
+post-v1 product vision. Completed Phase 0-6 plans/reports and accepted ADRs preserve
+the evidence and decisions that produced that baseline; they should not be rewritten
+retroactively for new development.
+
+The current roadmap deliberately keeps Windows + WezTerm as the primary environment.
+A native Kitty-terminal backend is a possible later direction, after scene composition
+and ambient functionality are mature. WezTerm's existing use of the Kitty Graphics
+Protocol is a transport detail and does not mean that the Kitty terminal application
+is currently supported.
 
 ## Runtime prerequisites
 
@@ -62,7 +67,29 @@ after the first installation. `mojit` can then be called from any directory:
 
 ```powershell
 mojit --list-effects
+mojit --list-scenes
 mojit "電脳世界"
+mojit "雨の夜" --scene rainy-night
+mojit -h
+```
+
+Built-in post-v1 ambient scenes currently include:
+
+- `rainy-night` — slanted blue rain over a sparse night sky;
+- `snowfall` — slow drifting snow with a quiet star background;
+- `space` — a denser field of large, slowly twinkling stars.
+
+The ordinary text command remains the default; selecting a scene simply composes
+deterministic ambient layers behind the same text/effect rendering path. The optional
+TOML key `scene = "rainy-night"` follows the existing `CLI > config file > defaults`
+precedence.
+
+A custom ordered scene uses the strict versioned form below. Layer order is back to
+front; version 1 requires exactly one `text` layer and permits at most 16 layers:
+
+```toml
+scene_version = 1
+layers = ["stars", "rain", "text"]
 ```
 
 If neither automatic source resolves to a supported interpreter, provide one

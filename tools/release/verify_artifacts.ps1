@@ -63,8 +63,14 @@ foreach ($version in @("3.11", "3.12", "3.13", "3.14")) {
     try {
         $list = (& (Join-Path $cell "Scripts\mojit.exe") --list-effects) -join "`n"
         if ($LASTEXITCODE -ne 0 -or $list -notmatch "neon") { throw "installed console smoke failed for $version" }
-        & $cellPython -m mojit --help | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "installed module smoke failed for $version" }
+        $installedHelp = (& (Join-Path $cell "Scripts\mojit.exe") -h) -join "`n"
+        if (
+            $LASTEXITCODE -ne 0 -or
+            $installedHelp -notmatch "--margin RATIO" -or
+            $installedHelp -notmatch "Configuration precedence"
+        ) {
+            throw "installed help contract failed for $version"
+        }
         $probeJson = (& $cellPython (Join-Path $PSScriptRoot "installed_probe.py")) -join ""
         if ($LASTEXITCODE -ne 0) { throw "native/typography probe failed for $version" }
         $probe = $probeJson | ConvertFrom-Json

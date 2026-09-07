@@ -26,7 +26,12 @@ from mojit.application.input_text import InputTextError, resolve_input_text
 from mojit.application.request import PreparedRun
 from mojit.application.runtime import Rasterizer, run_animation
 from mojit.config.models import (
+    DEFAULT_EFFECT,
+    DEFAULT_FONT,
     DEFAULT_FPS,
+    DEFAULT_MARGIN,
+    DEFAULT_ORIENTATION,
+    DEFAULT_SEED,
     MAX_FPS,
     MIN_FPS,
     ConfigOverrides,
@@ -41,6 +46,7 @@ from mojit.core.typography import (
     require_shaping_capability,
 )
 from mojit.effects.registry import UnknownEffectError, effect_names, get_effect
+from mojit.scenes.presets import UnknownSceneError, get_scene_builder, scene_names
 
 
 class CliUsageError(ValueError):
@@ -84,6 +90,7 @@ class _ArgumentParser(argparse.ArgumentParser):
 class CommandMode(str, Enum):
     RUN = "run"
     LIST_EFFECTS = "list-effects"
+    LIST_SCENES = "list-scenes"
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,32 +102,130 @@ class ParsedCli:
     debug: bool
 
 
+_HELP_EPILOG = """\
+Input:
+  Supply TEXT as one Unicode line. When TEXT is omitted, mojit reads UTF-8 text
+  from stdin. Stdin is reserved for text and cannot be used as --config -.
+
+Configuration precedence:
+  command line > --config PATH > %APPDATA%\\mojit\\config.toml > built-in defaults
+
+Examples:
+  mojit "hello"
+  mojit "warning" --effect glitch --fps 15
+  mojit "hello" --vertical
+  "piped text" | mojit
+  mojit --list-effects
+  mojit --list-scenes
+  mojit "rain" --scene rainy-night
+
+Exit status:
+  0  success, help, or normal Ctrl+C termination
+  1  unexpected runtime or terminal-cleanup failure
+  2  invalid input, configuration, environment, or command line
+"""
+
+
 def _parser() -> argparse.ArgumentParser:
-    parser = _ArgumentParser(prog="mojit", description="Render animated Unicode in WezTerm")
-    parser.add_argument("text", nargs="?", help="one line of Unicode text")
-    parser.add_argument("--effect", "-e")
+    parser = _ArgumentParser(
+        prog="mojit",
+        description="Display large animated Unicode text in WezTerm.",
+        epilog=_HELP_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "text",
+        nargs="?",
+        metavar="TEXT",
+        help="Unicode text to display; read UTF-8 stdin when omitted",
+    )
+    parser.add_argument(
+        "-e",
+        "--effect",
+        metavar="ID",
+        help=(
+            f"animation effect ({', '.join(effect_names())}; built-in default: {DEFAULT_EFFECT})"
+        ),
+    )
     orientation = parser.add_mutually_exclusive_group()
     orientation.add_argument(
-        "--vertical", dest="orientation", action="store_const", const=Orientation.VERTICAL
+        "--vertical",
+        dest="orientation",
+        action="store_const",
+        const=Orientation.VERTICAL,
+        help="lay out text top-to-bottom",
     )
     orientation.add_argument(
         "--horizontal",
         dest="orientation",
         action="store_const",
         const=Orientation.HORIZONTAL,
+        help=(
+            "lay out text left-to-right and override config "
+            f"(built-in default: {DEFAULT_ORIENTATION.value})"
+        ),
     )
-    parser.add_argument("--font")
+    parser.add_argument(
+        "--font",
+        metavar="PATH",
+        help=(
+            "font file; relative paths use the current directory "
+            f"(built-in default: {DEFAULT_FONT.as_posix()})"
+        ),
+    )
     parser.add_argument(
         "--fps",
         type=int,
         metavar="FPS",
-        help=f"target frame rate, {MIN_FPS}..{MAX_FPS} (default: {DEFAULT_FPS})",
+        help=(
+            f"target presentation rate, {MIN_FPS}..{MAX_FPS} frames/s "
+            f"(built-in default: {DEFAULT_FPS})"
+        ),
     )
-    parser.add_argument("--margin", type=float)
-    parser.add_argument("--seed", type=int)
-    parser.add_argument("--config")
-    parser.add_argument("--list-effects", action="store_true")
-    parser.add_argument("--debug", action="store_true")
+    parser.add_argument(
+        "--margin",
+        type=float,
+        metavar="RATIO",
+        help=(
+            "viewport fraction reserved on every edge, 0 <= RATIO < 0.5 "
+            f"(built-in default: {DEFAULT_MARGIN})"
+        ),
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        metavar="INTEGER",
+        help=f"signed 64-bit deterministic effect seed (built-in default: {DEFAULT_SEED})",
+    )
+    parser.add_argument(
+        "--scene",
+        metavar="NAME",
+        help=f"built-in ambient scene ({', '.join(scene_names())})",
+    )
+    parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help=(
+            "UTF-8 TOML file; relative paths use the current directory "
+            "(default: %%APPDATA%%\\mojit\\config.toml when present)"
+        ),
+    )
+    listing = parser.add_mutually_exclusive_group()
+    listing.add_argument(
+        "--list-effects",
+        action="store_true",
+        help="print available effect IDs and exit; accepts no rendering options",
+    )
+    listing.add_argument(
+        "--list-scenes",
+        action="store_true",
+        help="print built-in scene names and exit; accepts no rendering options",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="show Python tracebacks for diagnostic failures",
+    )
     return parser
 
 
@@ -135,18 +240,24 @@ def parse_cli(argv: Sequence[str]) -> ParsedCli:
             fps=namespace.fps,
             margin=namespace.margin,
             seed=namespace.seed,
+            scene=namespace.scene,
         )
     except ConfigValidationError as error:
         raise CliUsageError(str(error)) from error
 
-    mode = CommandMode.LIST_EFFECTS if namespace.list_effects else CommandMode.RUN
-    if mode is CommandMode.LIST_EFFECTS:
+    if namespace.list_effects:
+        mode = CommandMode.LIST_EFFECTS
+    elif namespace.list_scenes:
+        mode = CommandMode.LIST_SCENES
+    else:
+        mode = CommandMode.RUN
+    if mode is not CommandMode.RUN:
         if namespace.text is not None:
-            raise CliUsageError("--list-effects does not accept text")
+            raise CliUsageError(f"--{mode.value} does not accept text")
         if namespace.config is not None:
-            raise CliUsageError("--list-effects does not accept --config")
+            raise CliUsageError(f"--{mode.value} does not accept --config")
         if overrides != ConfigOverrides():
-            raise CliUsageError("--list-effects does not accept rendering options")
+            raise CliUsageError(f"--{mode.value} does not accept rendering options")
     if namespace.config == "-":
         raise CliUsageError("--config - is not supported; stdin is reserved for text")
 
@@ -185,6 +296,8 @@ def prepare_run(
         debug=parsed.debug,
     )
     get_effect(config.effect)
+    if config.scene is not None:
+        get_scene_builder(config.scene)
     text = resolve_input_text(parsed.text, stdin)
     font = load_font_resource(config.font)
     require_shaping_capability()
@@ -199,6 +312,8 @@ def prepare_run(
         margin=config.margin,
         seed=config.seed,
         debug=config.debug,
+        scene_id=config.scene,
+        scene_layers=config.scene_layers,
     )
 
 
@@ -212,6 +327,7 @@ _USER_ERRORS = (
     JapaneseSegmentationError,
     ShapingUnavailableError,
     UnknownEffectError,
+    UnknownSceneError,
     WezTermPreflightError,
 )
 
@@ -280,6 +396,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         parsed = parse_cli(sys.argv[1:] if argv is None else argv)
         if parsed.mode is CommandMode.LIST_EFFECTS:
             print(*effect_names(), sep="\n")
+            return 0
+        if parsed.mode is CommandMode.LIST_SCENES:
+            print(*scene_names(), sep="\n")
             return 0
         if parsed.text is None:
             _configure_piped_stdin(sys.stdin)

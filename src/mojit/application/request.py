@@ -7,7 +7,7 @@ import math
 import re
 from dataclasses import dataclass, field
 
-from mojit.core.models import Orientation
+from mojit.core.models import MAX_SCENE_LAYERS, Orientation
 from mojit.core.timing import MAX_FPS, MIN_FPS
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -28,6 +28,8 @@ class PreparedRun:
     margin: float
     seed: int
     debug: bool = False
+    scene_id: str | None = None
+    scene_layers: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.text, str) or not self.text or self.text.isspace():
@@ -69,3 +71,18 @@ class PreparedRun:
             raise ValueError("seed must be a signed 64-bit integer")
         if not isinstance(self.debug, bool):
             raise TypeError("debug must be a boolean")
+        if self.scene_id is not None and (
+            not isinstance(self.scene_id, str) or _EFFECT_ID.fullmatch(self.scene_id) is None
+        ):
+            raise ValueError("scene_id must be a valid scene identifier")
+        if self.scene_layers is not None:
+            if not isinstance(self.scene_layers, tuple) or not self.scene_layers:
+                raise ValueError("scene_layers must be a non-empty tuple")
+            if len(self.scene_layers) > MAX_SCENE_LAYERS:
+                raise ValueError(f"scene_layers must not exceed {MAX_SCENE_LAYERS} entries")
+            if any(layer not in {"rain", "snow", "stars", "text"} for layer in self.scene_layers):
+                raise ValueError("scene_layers contains an unknown layer")
+            if self.scene_layers.count("text") != 1:
+                raise ValueError("scene_layers must contain exactly one text layer")
+        if self.scene_id is not None and self.scene_layers is not None:
+            raise ValueError("scene_id and scene_layers are mutually exclusive")

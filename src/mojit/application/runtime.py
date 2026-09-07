@@ -12,9 +12,11 @@ from mojit.application.ports import AnimationBackend, MonotonicClock
 from mojit.application.request import PreparedRun
 from mojit.application.scheduler import FixedStepScheduler
 from mojit.core.models import Frame, RenderContext, TextMask, Viewport
+from mojit.core.scene import Scene, SceneCompositionError, render_scene
 from mojit.core.typography import TypographyKey
-from mojit.effects.api import Effect, EffectConfig
+from mojit.effects.api import Effect, EffectConfig, TextEffectLayer
 from mojit.effects.registry import get_effect
+from mojit.scenes.presets import build_custom_scene, build_scene, get_scene_builder
 
 Rasterizer = Callable[[bytes, TypographyKey], TextMask]
 StopPredicate = Callable[[], bool]
@@ -58,6 +60,8 @@ class RenderSession:
 
         self._request = request
         self._renderer: Effect = get_effect(request.effect_id)
+        if request.scene_id is not None:
+            get_scene_builder(request.scene_id)
         self._config = EffectConfig(request.seed)
         self._rasterizer = rasterizer
         self._cache = TextMaskCache()
@@ -83,12 +87,21 @@ class RenderSession:
             frame_index=frame_index,
             elapsed_seconds=frame_index / self._request.fps,
         )
-        frame = self._renderer(mask, context, self._config)
-        if not isinstance(frame, Frame):
-            raise RuntimeContractError("effect must return a Frame")
-        if (frame.width, frame.height) != (viewport.width_px, viewport.height_px):
-            raise RuntimeContractError("effect frame dimensions must match the viewport")
-        return frame
+        text_layer = TextEffectLayer(mask, self._renderer, self._config)
+        if self._request.scene_layers is not None:
+            scene = build_custom_scene(
+                self._request.scene_layers,
+                text_layer,
+                self._request.seed,
+            )
+        elif self._request.scene_id is not None:
+            scene = build_scene(self._request.scene_id, text_layer, self._request.seed)
+        else:
+            scene = Scene((text_layer,))
+        try:
+            return render_scene(scene, context)
+        except SceneCompositionError as error:
+            raise RuntimeContractError(f"effect layer contract failed: {error}") from error
 
 
 def _read_monotonic(clock: MonotonicClock, previous: float | None) -> float:
