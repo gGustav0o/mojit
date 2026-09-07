@@ -8,6 +8,8 @@
 htmlcov/
 build/
 dist/
+*.rar
+*.zip
 .venv/
 venv/
 

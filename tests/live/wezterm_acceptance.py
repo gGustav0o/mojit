@@ -24,6 +24,7 @@ from mojit.core.models import Frame, Orientation, Viewport
 from mojit.core.timing import MAX_FPS
 from mojit.core.typography import require_shaping_capability
 from mojit.scenes.presets import scene_names
+from tools.process_memory import current_process_memory
 
 pytestmark = pytest.mark.wezterm_live
 
@@ -201,7 +202,7 @@ def test_live_ambient_scene_and_restore(scene_id: str) -> None:
     assert _visible_cursor()
 
 
-def _wezterm_working_set() -> int:
+def _terminal_working_set() -> int:
     command = "(Get-Process wezterm-gui | Measure-Object -Property WorkingSet64 -Sum).Sum"
     result = subprocess.run(
         ("powershell.exe", "-NoProfile", "-Command", command),
@@ -235,15 +236,28 @@ def _adjust_pane(direction: str) -> None:
 def test_live_structured_soak_with_resize_metrics() -> None:
     duration = float(os.environ.get("MOJIT_LIVE_SOAK_SECONDS", "300"))
     assert duration >= 1.0
-    working_set_before = _wezterm_working_set()
+    terminal_working_set_before = _terminal_working_set()
     started = time.perf_counter()
     next_resize_at = started + min(1.0, duration / 4.0)
+    memory_interval = max(0.25, min(10.0, duration / 10.0))
+    next_memory_at = started
+    renderer_memory_samples: list[dict[str, int | float]] = []
     resize_attempts = 0
     resize_directions = ("Left", "Right", "Up", "Down")
 
     def stop_or_resize() -> bool:
-        nonlocal next_resize_at, resize_attempts
+        nonlocal next_memory_at, next_resize_at, resize_attempts
         now = time.perf_counter()
+        if now >= next_memory_at:
+            memory = current_process_memory()
+            renderer_memory_samples.append(
+                {
+                    "elapsed_seconds": now - started,
+                    "working_set_bytes": memory.working_set_bytes,
+                    "private_bytes": memory.private_bytes,
+                }
+            )
+            next_memory_at = now + memory_interval
         if now >= next_resize_at and resize_attempts < len(resize_directions):
             _adjust_pane(resize_directions[resize_attempts])
             resize_attempts += 1
@@ -257,7 +271,15 @@ def test_live_structured_soak_with_resize_metrics() -> None:
         should_stop=stop_or_resize,
     )
     elapsed = time.perf_counter() - started
-    working_set_after = _wezterm_working_set()
+    terminal_working_set_after = _terminal_working_set()
+    renderer_memory_after = current_process_memory()
+    renderer_memory_samples.append(
+        {
+            "elapsed_seconds": elapsed,
+            "working_set_bytes": renderer_memory_after.working_set_bytes,
+            "private_bytes": renderer_memory_after.private_bytes,
+        }
+    )
 
     assert result is not None
     assert result.presented_frames == metrics.frames
@@ -289,9 +311,21 @@ def test_live_structured_soak_with_resize_metrics() -> None:
             "viewports": metrics.viewports,
             "resize_attempts": resize_attempts,
             "resize_directions": resize_directions,
-            "wezterm_working_set_before": working_set_before,
-            "wezterm_working_set_after": working_set_after,
-            "wezterm_working_set_delta": working_set_after - working_set_before,
+            "renderer_process_id": renderer_memory_after.pid,
+            "renderer_memory_samples": renderer_memory_samples,
+            "renderer_working_set_delta": (
+                renderer_memory_samples[-1]["working_set_bytes"]
+                - renderer_memory_samples[0]["working_set_bytes"]
+            ),
+            "renderer_private_bytes_delta": (
+                renderer_memory_samples[-1]["private_bytes"]
+                - renderer_memory_samples[0]["private_bytes"]
+            ),
+            "terminal_working_set_before": terminal_working_set_before,
+            "terminal_working_set_after": terminal_working_set_after,
+            "terminal_working_set_delta": (
+                terminal_working_set_after - terminal_working_set_before
+            ),
         },
         sort_keys=True,
     )

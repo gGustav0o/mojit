@@ -1,4 +1,4 @@
-"""Closed-world inspection and deterministic assembly of Phase 6 artifacts."""
+"""Closed-world inspection and deterministic assembly of release artifacts."""
 
 from __future__ import annotations
 
@@ -19,6 +19,12 @@ EXPECTED_DLL_SHA256 = "4283ba30461395fdf46399b2665176e6f41d11bc7bf6977188120152f
 REQUIRED_SUFFIXES = {
     "mojit/bootstrap.py",
     "mojit/native_runtime.py",
+    "mojit/config/toml.py",
+    "mojit/core/scene.py",
+    "mojit/layers/rain.py",
+    "mojit/layers/snow.py",
+    "mojit/layers/stars.py",
+    "mojit/scenes/presets.py",
     "mojit/_native/manifest.toml",
     "mojit/_native/win_amd64/libfribidi-0.dll",
     f"{DIST_INFO}/METADATA",

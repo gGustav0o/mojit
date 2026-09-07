@@ -62,7 +62,13 @@ foreach ($version in @("3.11", "3.12", "3.13", "3.14")) {
     $env:Path = "$hostile;$env:SystemRoot\System32;$env:SystemRoot;$(Join-Path $cell 'Scripts')"
     try {
         $list = (& (Join-Path $cell "Scripts\mojit.exe") --list-effects) -join "`n"
-        if ($LASTEXITCODE -ne 0 -or $list -notmatch "neon") { throw "installed console smoke failed for $version" }
+        if ($LASTEXITCODE -ne 0 -or $list -ne "chromatic`nglitch`nneon`npulse") {
+            throw "installed effect listing smoke failed for $version"
+        }
+        $sceneList = (& (Join-Path $cell "Scripts\mojit.exe") --list-scenes) -join "`n"
+        if ($LASTEXITCODE -ne 0 -or $sceneList -ne "rainy-night`nsnowfall`nspace") {
+            throw "installed scene listing smoke failed for $version"
+        }
         $installedHelp = (& (Join-Path $cell "Scripts\mojit.exe") -h) -join "`n"
         if (
             $LASTEXITCODE -ne 0 -or
@@ -74,7 +80,13 @@ foreach ($version in @("3.11", "3.12", "3.13", "3.14")) {
         $probeJson = (& $cellPython (Join-Path $PSScriptRoot "installed_probe.py")) -join ""
         if ($LASTEXITCODE -ne 0) { throw "native/typography probe failed for $version" }
         $probe = $probeJson | ConvertFrom-Json
-        if (-not $probe.raqm -or $probe.fribidi_sha256 -ne "4283ba30461395fdf46399b2665176e6f41d11bc7bf6977188120152fde31fd2") {
+        if (
+            -not $probe.raqm -or
+            $probe.fribidi_sha256 -ne "4283ba30461395fdf46399b2665176e6f41d11bc7bf6977188120152fde31fd2" -or
+            -not $probe.scene_render_deterministic -or
+            ($probe.scenes -join ",") -ne "rainy-night,snowfall,space" -or
+            ($probe.scene_config_layers -join ",") -ne "stars,rain,text"
+        ) {
             throw "invalid native evidence for $version"
         }
         $missingFont = Join-Path $cell "missing-font.ttc"
@@ -132,8 +144,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "User installer upgrade verification failed" }
     $installedCommand = Join-Path $installerRoot "Scripts\mojit.exe"
     $installedEffects = (& $installedCommand --list-effects) -join "`n"
-    if ($LASTEXITCODE -ne 0 -or $installedEffects -notmatch "neon") {
+    if ($LASTEXITCODE -ne 0 -or $installedEffects -ne "chromatic`nglitch`nneon`npulse") {
         throw "Installed global command smoke failed outside its installation directory"
+    }
+    $installedScenes = (& $installedCommand --list-scenes) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or $installedScenes -ne "rainy-night`nsnowfall`nspace") {
+        throw "Installed global scene smoke failed outside its installation directory"
     }
     & (Join-Path $installerRoot "install.ps1") -Uninstall -PathScope None
     if ($LASTEXITCODE -ne 0 -or (Test-Path -LiteralPath $installerRoot)) {

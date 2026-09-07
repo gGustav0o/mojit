@@ -52,9 +52,16 @@ def main() -> int:
     from mojit.native_runtime import activate_native_runtime
 
     runtime = activate_native_runtime()
+    import numpy as np
     from PIL import Image, ImageDraw, ImageFont, features
 
     from mojit.adapters.budoux_segmenter import segment_japanese_phrases
+    from mojit.config.toml import parse_toml_config
+    from mojit.core.models import RenderContext, TextMask, Viewport
+    from mojit.core.scene import render_scene
+    from mojit.effects.api import EffectConfig, TextEffectLayer
+    from mojit.effects.neon import render_neon
+    from mojit.scenes.presets import build_custom_scene, scene_names
 
     budoux_version = importlib.metadata.version("budoux")
     if budoux_version != "0.9.0":
@@ -71,6 +78,25 @@ def main() -> int:
     draw = ImageDraw.Draw(image)
     draw.text((32, 16), "電脳世界", fill=255, font=font, direction="ttb", language="ja")
     rendered_hash = hashlib.sha256(image.tobytes()).hexdigest()
+
+    scene_config = parse_toml_config('scene_version = 1\nlayers = ["stars", "rain", "text"]\n')
+    if scene_config.scene_layers != ("stars", "rain", "text"):
+        raise RuntimeError("installed custom scene parsing failed")
+    viewport = Viewport(96, 64)
+    alpha = np.zeros((viewport.height_px, viewport.width_px), dtype=np.uint8)
+    alpha[20:44, 28:68] = 255
+    text_layer = TextEffectLayer(
+        TextMask(viewport.width_px, viewport.height_px, alpha),
+        render_neon,
+        EffectConfig(seed=42),
+    )
+    scene = build_custom_scene(scene_config.scene_layers, text_layer, seed=42)
+    context = RenderContext(viewport, frame_index=12, elapsed_seconds=1.5)
+    scene_frame = render_scene(scene, context)
+    scene_deterministic = scene_frame == render_scene(scene, context)
+    if not scene_deterministic or not np.any(scene_frame.rgba[..., 3]):
+        raise RuntimeError("installed scene rendering failed")
+    scene_hash = hashlib.sha256(scene_frame.rgba.tobytes()).hexdigest()
 
     expected_dll = runtime.fribidi_dll.resolve()
     loaded = [path for path in _loaded_modules() if path.name.lower() == "libfribidi-0.dll"]
@@ -94,6 +120,10 @@ def main() -> int:
                 "fribidi_sha256": dll_hash,
                 "vertical_reference_sha256": rendered_hash,
                 "font": str(font_path.resolve()),
+                "scene_config_layers": list(scene_config.scene_layers),
+                "scene_frame_sha256": scene_hash,
+                "scene_render_deterministic": scene_deterministic,
+                "scenes": list(scene_names()),
             },
             sort_keys=True,
         )
