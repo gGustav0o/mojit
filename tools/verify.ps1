@@ -10,7 +10,7 @@ $candidate = Join-Path $projectRoot $Python
 if (Test-Path -LiteralPath $candidate -PathType Leaf) {
     $pythonPath = (Resolve-Path -LiteralPath $candidate).Path
 } else {
-    $command = Get-Command $Python -CommandType Application -ErrorAction Stop
+    $command = @(Get-Command $Python -CommandType Application -ErrorAction Stop)[0]
     $pythonPath = $command.Source
 }
 
