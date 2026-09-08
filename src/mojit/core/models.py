@@ -60,6 +60,11 @@ def _immutable_uint8_array(
         raise ModelValidationError(f"{name} must have shape {shape}, got {value.shape}")
 
     contiguous = np.ascontiguousarray(value)
+    storage: object = contiguous
+    while isinstance(storage, np.ndarray) and storage.base is not None:
+        storage = storage.base
+    if not contiguous.flags.writeable and isinstance(storage, bytes):
+        return contiguous
     immutable_buffer = contiguous.tobytes(order="C")
     return np.frombuffer(immutable_buffer, dtype=np.uint8).reshape(shape)
 

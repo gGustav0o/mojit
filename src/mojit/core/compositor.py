@@ -83,6 +83,13 @@ def _require_frame(value: object, *, name: str) -> Frame:
     return value
 
 
+def _frame_from_pillow_image(image: Image.Image, width: int, height: int) -> Frame:
+    transparent = image.getchannel("A").point([255] + [0] * 255)
+    image.paste((0, 0, 0, 0), mask=transparent)
+    rgba = np.frombuffer(image.tobytes(), dtype=np.uint8).reshape((height, width, 4))
+    return Frame(width, height, rgba)
+
+
 def _translated_alpha(alpha: np.ndarray, dx_px: int, dy_px: int) -> np.ndarray:
     height, width = alpha.shape
     output = np.zeros((height, width), dtype=np.uint8)
@@ -175,9 +182,7 @@ def alpha_composite(bottom: Frame, top: Frame) -> Frame:
         raise CompositorError("frames must have equal dimensions")
 
     result = Image.alpha_composite(Image.fromarray(lower.rgba), Image.fromarray(upper.rgba))
-    rgba = np.array(result, dtype=np.uint8, copy=True)
-    rgba[rgba[..., 3] == 0, :3] = 0
-    return Frame(lower.width, lower.height, rgba)
+    return _frame_from_pillow_image(result, lower.width, lower.height)
 
 
 def alpha_composite_many(frames: Iterable[Frame]) -> Frame:
@@ -208,9 +213,7 @@ def alpha_composite_many(frames: Iterable[Frame]) -> Frame:
             raise CompositorError("frames must have equal dimensions")
         result.alpha_composite(Image.fromarray(overlay.rgba))
         del overlay, overlay_value
-    rgba = np.array(result, dtype=np.uint8, copy=True)
-    rgba[rgba[..., 3] == 0, :3] = 0
-    return Frame(width, height, rgba)
+    return _frame_from_pillow_image(result, width, height)
 
 
 def composite_colorized_masks(
@@ -243,9 +246,7 @@ def composite_colorized_masks(
         overlay.putalpha(Image.fromarray(_colorized_alpha(mask, color)))
         result.alpha_composite(overlay)
 
-    rgba = np.array(result, dtype=np.uint8, copy=True)
-    rgba[rgba[..., 3] == 0, :3] = 0
-    return Frame(width, height, rgba)
+    return _frame_from_pillow_image(result, width, height)
 
 
 def merge_color_channels(red: TextMask, green: TextMask, blue: TextMask) -> Frame:

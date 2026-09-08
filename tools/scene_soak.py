@@ -91,6 +91,8 @@ def main() -> int:
         scene = build_custom_scene(layers, text, 42)
         scene_label = f"custom-{arguments.layer_count}-layers"
 
+    gc.collect()
+    initial_memory = current_process_memory()
     frame_index = 0
     for frame_index in range(arguments.warmup_frames):
         render_scene(
@@ -99,10 +101,18 @@ def main() -> int:
         )
     del frame_index
     gc.collect()
+    post_warmup_memory = current_process_memory()
 
-    samples: list[dict[str, int | float]] = []
+    samples: list[dict[str, int | float]] = [
+        {
+            "elapsed_seconds": 0.0,
+            "frame_index": 0,
+            "working_set_bytes": post_warmup_memory.working_set_bytes,
+            "private_bytes": post_warmup_memory.private_bytes,
+        }
+    ]
     started = time.perf_counter()
-    next_sample = started
+    next_sample = started + arguments.sample_interval_seconds
     rendered_frames = 0
     last_frame = None
     while True:
@@ -144,12 +154,16 @@ def main() -> int:
         "viewport": [viewport.width_px, viewport.height_px],
         "duration_seconds": elapsed,
         "rendered_frames": rendered_frames,
+        "initial_memory": initial_memory.as_dict(),
+        "post_warmup_memory": post_warmup_memory.as_dict(),
+        "final_memory": final_memory.as_dict(),
         "samples": samples,
         "working_set_delta_bytes": samples[-1]["working_set_bytes"]
         - samples[0]["working_set_bytes"],
         "private_bytes_delta": samples[-1]["private_bytes"] - samples[0]["private_bytes"],
         "peak_working_set_bytes": max(int(item["working_set_bytes"]) for item in samples),
         "peak_private_bytes": max(int(item["private_bytes"]) for item in samples),
+        "os_peak_working_set_bytes": final_memory.peak_working_set_bytes,
         "tail_working_set_slope_bytes_per_second": _slope(samples, "working_set_bytes"),
         "tail_private_slope_bytes_per_second": _slope(samples, "private_bytes"),
     }

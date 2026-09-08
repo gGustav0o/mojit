@@ -38,4 +38,8 @@ def test_scene_soak_harness_samples_the_renderer_process_without_a_leak_threshol
     assert len(metrics["samples"]) >= 5
     assert metrics["peak_working_set_bytes"] > 0
     assert metrics["peak_private_bytes"] > 0
+    assert metrics["initial_memory"]["pid"] == metrics["process_id"]
+    assert metrics["post_warmup_memory"]["pid"] == metrics["process_id"]
+    assert metrics["final_memory"]["pid"] == metrics["process_id"]
+    assert metrics["os_peak_working_set_bytes"] >= metrics["peak_working_set_bytes"]
     assert "tail_private_slope_bytes_per_second" in metrics

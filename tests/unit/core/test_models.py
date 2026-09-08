@@ -71,6 +71,17 @@ def test_frame_owns_an_immutable_rgba_buffer() -> None:
         frame.rgba.setflags(write=True)
 
 
+def test_frame_reuses_provably_immutable_bytes_backed_storage() -> None:
+    source = np.frombuffer(bytes(range(24)), dtype=np.uint8).reshape((2, 3, 4))
+
+    frame = Frame(width=3, height=2, rgba=source)
+
+    assert np.shares_memory(frame.rgba, source)
+    assert not frame.rgba.flags.writeable
+    with pytest.raises(ValueError):
+        frame.rgba.setflags(write=True)
+
+
 def test_render_context_validates_deterministic_inputs() -> None:
     viewport = Viewport(100, 50)
     context = RenderContext(viewport=viewport, frame_index=3, elapsed_seconds=0.1)

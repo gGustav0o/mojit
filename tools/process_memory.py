@@ -30,6 +30,7 @@ class ProcessMemory:
 
     pid: int
     working_set_bytes: int
+    peak_working_set_bytes: int
     private_bytes: int
 
     def as_dict(self) -> dict[str, int]:
@@ -61,5 +62,6 @@ def current_process_memory() -> ProcessMemory:
     return ProcessMemory(
         pid=os.getpid(),
         working_set_bytes=int(counters.working_set_size),
+        peak_working_set_bytes=int(counters.peak_working_set_size),
         private_bytes=int(counters.private_usage),
     )
