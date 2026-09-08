@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 
 import pytest
 
@@ -106,13 +107,13 @@ def test_help_documents_complete_cli_contract(
     assert main([help_option]) == 0
     captured = capsys.readouterr()
     assert captured.err == ""
+    assert re.search(r"(?m)^\s+-e(?: ID)?, --effect ID\s", captured.out)
     normalized_help = " ".join(captured.out.split())
     for expected in (
         "usage: mojit",
         "Display large animated Unicode text in WezTerm.",
         "TEXT",
         "-h, --help",
-        "-e, --effect ID",
         "--vertical",
         "--horizontal",
         "--font PATH",
