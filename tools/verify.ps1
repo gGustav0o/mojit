@@ -43,13 +43,15 @@ try {
             & $pythonPath -c "import build, numpy, PIL, pytest, ruff; print('verification imports: ok')"
         }
         if (Get-Command git -ErrorAction SilentlyContinue) {
-            $trackedArchives = @(& git ls-files -- "*.rar" "*.zip")
-            if ($LASTEXITCODE -ne 0) { throw "Tracked-archive inventory failed" }
-            $presentTrackedArchives = @(
-                $trackedArchives | Where-Object { Test-Path -LiteralPath (Join-Path $projectRoot $_) }
+            $trackedGenerated = @(
+                & git ls-files -- "build/**" "dist/**" "*.rar" "*.zip" "*.7z" "*.whl"
             )
-            if ($presentTrackedArchives.Count -ne 0) {
-                throw "Generated archives must not be tracked: $($presentTrackedArchives -join ', ')"
+            if ($LASTEXITCODE -ne 0) { throw "Tracked generated-file inventory failed" }
+            $presentTrackedGenerated = @(
+                $trackedGenerated | Where-Object { Test-Path -LiteralPath (Join-Path $projectRoot $_) }
+            )
+            if ($presentTrackedGenerated.Count -ne 0) {
+                throw "Build outputs and release archives must not be tracked: $($presentTrackedGenerated -join ', ')"
             }
         }
         Invoke-Checked "lint" { & $pythonPath -m ruff check src tests tools }
@@ -78,6 +80,14 @@ try {
         Push-Location $verificationRoot
         try {
             $installedCommand = Join-Path $installRoot "Scripts\mojit.exe"
+            $installedHelp = @(& $installedCommand -h)
+            if (
+                $LASTEXITCODE -ne 0 -or
+                ($installedHelp -join "`n") -notmatch "--scene NAME" -or
+                ($installedHelp -join "`n") -notmatch "Configuration precedence"
+            ) {
+                throw "Installed help smoke failed"
+            }
             $effects = @(& $installedCommand --list-effects)
             if ($LASTEXITCODE -ne 0 -or ($effects -join ",") -ne "chromatic,glitch,neon,pulse") {
                 throw "Installed effect listing smoke failed"

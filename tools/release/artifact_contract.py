@@ -12,9 +12,13 @@ import struct
 import zipfile
 from pathlib import Path, PurePosixPath
 
-WHEEL_NAME = re.compile(r"^mojit-1\.0\.0-py3-none-win_amd64\.whl$")
-BUNDLE_NAME = re.compile(r"^mojit-1\.0\.0-windows-x64-wheelhouse\.zip$")
-DIST_INFO = "mojit-1.0.0.dist-info"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+VERSION = (PROJECT_ROOT / "VERSION").read_text(encoding="ascii").strip()
+if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", VERSION) is None:
+    raise RuntimeError(f"invalid release VERSION: {VERSION!r}")
+WHEEL_NAME = re.compile(rf"^mojit-{re.escape(VERSION)}-py3-none-win_amd64\.whl$")
+BUNDLE_NAME = re.compile(rf"^mojit-{re.escape(VERSION)}-windows-x64-wheelhouse\.zip$")
+DIST_INFO = f"mojit-{VERSION}.dist-info"
 EXPECTED_DLL_SHA256 = "4283ba30461395fdf46399b2665176e6f41d11bc7bf6977188120152fde31fd2"
 REQUIRED_SUFFIXES = {
     "mojit/bootstrap.py",
@@ -38,7 +42,7 @@ BUNDLE_MEMBERS = {
     "WHEELHOUSE_SHA256SUMS.txt",
     "budoux-0.9.0-py3-none-any.whl",
     "install.ps1",
-    "mojit-1.0.0-py3-none-win_amd64.whl",
+    f"mojit-{VERSION}-py3-none-win_amd64.whl",
     "numpy-2.4.6-cp311-cp311-win_amd64.whl",
     "numpy-2.4.6-cp312-cp312-win_amd64.whl",
     "numpy-2.4.6-cp313-cp313-win_amd64.whl",
@@ -90,7 +94,7 @@ def inspect_wheel(path: Path) -> dict[str, object]:
         ):
             raise ArtifactContractError("WHEEL metadata is not Windows x64 binary metadata")
         for field in (
-            "Version: 1.0.0",
+            f"Version: {VERSION}",
             "Requires-Python: <3.15,>=3.11",
             "License-Expression: MIT",
             "Requires-Dist: budoux==0.9.0",

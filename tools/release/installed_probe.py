@@ -55,13 +55,18 @@ def main() -> int:
     import numpy as np
     from PIL import Image, ImageDraw, ImageFont, features
 
+    from mojit import __version__
     from mojit.adapters.budoux_segmenter import segment_japanese_phrases
     from mojit.config.toml import parse_toml_config
     from mojit.core.models import RenderContext, TextMask, Viewport
     from mojit.core.scene import render_scene
     from mojit.effects.api import EffectConfig, TextEffectLayer
     from mojit.effects.neon import render_neon
-    from mojit.scenes.presets import build_custom_scene, scene_names
+    from mojit.scenes.presets import build_custom_scene, build_scene, scene_names
+
+    mojit_version = importlib.metadata.version("mojit")
+    if __version__ != mojit_version:
+        raise RuntimeError("package version does not match installed metadata")
 
     budoux_version = importlib.metadata.version("budoux")
     if budoux_version != "0.9.0":
@@ -97,6 +102,13 @@ def main() -> int:
     if not scene_deterministic or not np.any(scene_frame.rgba[..., 3]):
         raise RuntimeError("installed scene rendering failed")
     scene_hash = hashlib.sha256(scene_frame.rgba.tobytes()).hexdigest()
+    built_in_scenes_rendered = []
+    for scene_id in scene_names():
+        built_in = build_scene(scene_id, text_layer, seed=42)
+        built_in_frame = render_scene(built_in, context)
+        if built_in_frame != render_scene(built_in, context):
+            raise RuntimeError(f"installed built-in scene is not deterministic: {scene_id}")
+        built_in_scenes_rendered.append(scene_id)
 
     expected_dll = runtime.fribidi_dll.resolve()
     loaded = [path for path in _loaded_modules() if path.name.lower() == "libfribidi-0.dll"]
@@ -113,6 +125,7 @@ def main() -> int:
             {
                 "python": sys.version.split()[0],
                 "implementation": sys.implementation.name,
+                "mojit_version": mojit_version,
                 "budoux": budoux_version,
                 "japanese_phrases": phrases,
                 "raqm": True,
@@ -123,6 +136,7 @@ def main() -> int:
                 "scene_config_layers": list(scene_config.scene_layers),
                 "scene_frame_sha256": scene_hash,
                 "scene_render_deterministic": scene_deterministic,
+                "built_in_scenes_rendered": built_in_scenes_rendered,
                 "scenes": list(scene_names()),
             },
             sort_keys=True,

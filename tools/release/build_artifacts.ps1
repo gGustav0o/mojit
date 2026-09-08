@@ -6,6 +6,8 @@ param(
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $pythonPath = (Resolve-Path (Join-Path $projectRoot $Python)).Path
+$version = (Get-Content -LiteralPath (Join-Path $projectRoot "VERSION") -Raw -Encoding ascii).Trim()
+if ($version -notmatch "^[0-9]+\.[0-9]+\.[0-9]+$") { throw "Invalid release VERSION: $version" }
 $distRoot = Join-Path $projectRoot "dist\release"
 $wheelhouse = Join-Path $distRoot "wheelhouse"
 if (Test-Path -LiteralPath $distRoot) {
@@ -21,7 +23,7 @@ New-Item -ItemType Directory -Force -Path $wheelhouse | Out-Null
 $env:SOURCE_DATE_EPOCH = "1787443200"
 & $pythonPath -m build --wheel --no-isolation --outdir $distRoot
 if ($LASTEXITCODE -ne 0) { throw "Wheel build failed" }
-$wheel = Get-Item (Join-Path $distRoot "mojit-1.0.0-py3-none-win_amd64.whl")
+$wheel = Get-Item (Join-Path $distRoot "mojit-$version-py3-none-win_amd64.whl")
 & $pythonPath (Join-Path $PSScriptRoot "artifact_contract.py") --wheel $wheel.FullName
 if ($LASTEXITCODE -ne 0) { throw "Wheel contract failed" }
 Copy-Item -LiteralPath $wheel.FullName -Destination $wheelhouse
@@ -42,7 +44,7 @@ $wheelhouseHashes = foreach ($file in $wheelhouseFiles) {
 }
 Set-Content -LiteralPath (Join-Path $wheelhouse "WHEELHOUSE_SHA256SUMS.txt") -Value $wheelhouseHashes -Encoding ascii
 
-$bundle = Join-Path $distRoot "mojit-1.0.0-windows-x64-wheelhouse.zip"
+$bundle = Join-Path $distRoot "mojit-$version-windows-x64-wheelhouse.zip"
 & $pythonPath (Join-Path $PSScriptRoot "artifact_contract.py") --zip-source $wheelhouse --zip-target $bundle
 if ($LASTEXITCODE -ne 0) { throw "Wheelhouse bundle creation failed" }
 & $pythonPath (Join-Path $PSScriptRoot "artifact_contract.py") --bundle $bundle

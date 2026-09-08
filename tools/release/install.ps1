@@ -10,7 +10,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Product = "mojit"
-$Version = "1.0.0"
 $MarkerName = ".mojit-install.json"
 $ManifestName = "WHEELHOUSE_SHA256SUMS.txt"
 
@@ -137,11 +136,16 @@ function Assert-Wheelhouse([string]$Root) {
     }
 
     $applicationWheels = @(
-        $files | Where-Object { $_.Name -eq "mojit-$Version-py3-none-win_amd64.whl" }
+        $files | Where-Object { $_.Name -match "^mojit-[0-9]+\.[0-9]+\.[0-9]+-py3-none-win_amd64\.whl$" }
     )
     if ($applicationWheels.Count -ne 1) {
-        throw "Wheelhouse must contain exactly one mojit $Version wheel"
+        throw "Wheelhouse must contain exactly one versioned mojit wheel"
     }
+    $match = [regex]::Match(
+        $applicationWheels[0].Name,
+        "^mojit-(?<version>[0-9]+\.[0-9]+\.[0-9]+)-py3-none-win_amd64\.whl$"
+    )
+    return $match.Groups["version"].Value
 }
 
 function Resolve-CompatiblePython([string]$Requested) {
@@ -149,12 +153,12 @@ function Resolve-CompatiblePython([string]$Requested) {
         if (Test-Path -LiteralPath $Requested -PathType Leaf) {
             $candidate = (Resolve-Path -LiteralPath $Requested).Path
         } else {
-            $command = Get-Command $Requested -ErrorAction Stop
+            $command = @(Get-Command $Requested -CommandType Application -ErrorAction Stop)[0]
             $candidate = $command.Source
         }
     } else {
         $candidate = ""
-        $launcher = Get-Command "py.exe" -ErrorAction SilentlyContinue
+        $launcher = @(Get-Command "py.exe" -CommandType Application -ErrorAction SilentlyContinue)[0]
         if ($launcher) {
             foreach ($version in @("3.14", "3.13", "3.12", "3.11")) {
                 $output = (& $launcher.Source "-$version" -c "import sys; print(sys.executable)" 2>$null)
@@ -165,7 +169,9 @@ function Resolve-CompatiblePython([string]$Requested) {
             }
         }
         if (-not $candidate) {
-            $pathPython = Get-Command "python.exe" -ErrorAction SilentlyContinue
+            $pathPython = @(
+                Get-Command "python.exe" -CommandType Application -ErrorAction SilentlyContinue
+            )[0]
             if ($pathPython) { $candidate = $pathPython.Source }
         }
         if (-not $candidate) {
@@ -201,7 +207,7 @@ $installPath = Assert-SafeInstallRoot $InstallRoot
 $scriptsPath = Join-Path $installPath "Scripts"
 
 if ($Uninstall) {
-    [void](Get-OwnedInstallation $installPath)
+    $ownedInstallation = Get-OwnedInstallation $installPath
     $currentLocation = Get-NormalizedPath ((Get-Location).Path)
     if ($currentLocation -eq $installPath -or $currentLocation.StartsWith($installPath + "\")) {
         Set-Location ([IO.Path]::GetTempPath())
@@ -212,12 +218,12 @@ if ($Uninstall) {
         [void](Set-MojitPathEntry $scriptsPath $false "Process")
         if ($PathScope -eq "User") { Publish-EnvironmentChange }
     }
-    Write-Host "mojit $Version was uninstalled from $installPath"
+    Write-Host "mojit $($ownedInstallation.version) was uninstalled from $installPath"
     exit 0
 }
 
 $wheelhousePath = (Resolve-Path -LiteralPath $Wheelhouse).Path
-Assert-Wheelhouse $wheelhousePath
+$Version = Assert-Wheelhouse $wheelhousePath
 $created = $false
 $pathAdded = $false
 
@@ -262,7 +268,7 @@ try {
         if ($PathScope -eq "None") {
             $commandPath = $expectedCommand
         } else {
-            $command = Get-Command "mojit.exe" -ErrorAction Stop
+            $command = @(Get-Command "mojit.exe" -CommandType Application -ErrorAction Stop)[0]
             if ((Get-NormalizedPath $command.Source) -ne (Get-NormalizedPath $expectedCommand)) {
                 throw "The installed mojit command is shadowed by $($command.Source)"
             }

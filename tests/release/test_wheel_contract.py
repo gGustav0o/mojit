@@ -9,6 +9,7 @@ from pathlib import Path
 
 from tools.release.artifact_contract import (
     BUNDLE_MEMBERS,
+    VERSION,
     create_deterministic_zip,
     inspect_bundle,
     inspect_wheel,
@@ -20,7 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def test_runtime_version_matches_release_metadata() -> None:
     import mojit
 
-    assert mojit.__version__ == "1.0.0"
+    assert mojit.__version__ == VERSION
 
 
 def test_built_wheel_is_closed_windows_x64_artifact(tmp_path: Path) -> None:
@@ -43,7 +44,7 @@ def test_built_wheel_is_closed_windows_x64_artifact(tmp_path: Path) -> None:
 
     evidence = inspect_wheel(wheel)
 
-    assert evidence["wheel"] == "mojit-1.0.0-py3-none-win_amd64.whl"
+    assert evidence["wheel"] == f"mojit-{VERSION}-py3-none-win_amd64.whl"
     with zipfile.ZipFile(wheel) as archive:
         assert not any(
             name.startswith(("tests/", "spikes/", "vendor/")) for name in archive.namelist()
@@ -63,7 +64,7 @@ def test_offline_bundle_contains_verified_installer_and_exact_inventory(tmp_path
         "\n".join(lines) + "\n",
         encoding="ascii",
     )
-    bundle = tmp_path / "mojit-1.0.0-windows-x64-wheelhouse.zip"
+    bundle = tmp_path / f"mojit-{VERSION}-windows-x64-wheelhouse.zip"
 
     create_deterministic_zip(wheelhouse, bundle)
 
