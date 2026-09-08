@@ -159,8 +159,7 @@ def _parser() -> argparse.ArgumentParser:
         action="store_const",
         const=Orientation.HORIZONTAL,
         help=(
-            "lay out text left-to-right and override config "
-            f"(default: {DEFAULT_ORIENTATION.value})"
+            f"lay out text left-to-right and override config (default: {DEFAULT_ORIENTATION.value})"
         ),
     )
     parser.add_argument(
@@ -175,10 +174,7 @@ def _parser() -> argparse.ArgumentParser:
         "--fps",
         type=int,
         metavar="FPS",
-        help=(
-            f"target presentation rate, {MIN_FPS}..{MAX_FPS} frames/s "
-            f"(default: {DEFAULT_FPS})"
-        ),
+        help=(f"target presentation rate, {MIN_FPS}..{MAX_FPS} frames/s (default: {DEFAULT_FPS})"),
     )
     parser.add_argument(
         "--margin",
