@@ -143,9 +143,7 @@ def _parser() -> argparse.ArgumentParser:
         "-e",
         "--effect",
         metavar="ID",
-        help=(
-            f"animation effect ({', '.join(effect_names())}; built-in default: {DEFAULT_EFFECT})"
-        ),
+        help=f"animation effect ({', '.join(effect_names())}; default: {DEFAULT_EFFECT})",
     )
     orientation = parser.add_mutually_exclusive_group()
     orientation.add_argument(
@@ -162,7 +160,7 @@ def _parser() -> argparse.ArgumentParser:
         const=Orientation.HORIZONTAL,
         help=(
             "lay out text left-to-right and override config "
-            f"(built-in default: {DEFAULT_ORIENTATION.value})"
+            f"(default: {DEFAULT_ORIENTATION.value})"
         ),
     )
     parser.add_argument(
@@ -170,7 +168,7 @@ def _parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help=(
             "font file; relative paths use the current directory "
-            f"(built-in default: {DEFAULT_FONT.as_posix()})"
+            f"(default: {DEFAULT_FONT.as_posix()})"
         ),
     )
     parser.add_argument(
@@ -179,7 +177,7 @@ def _parser() -> argparse.ArgumentParser:
         metavar="FPS",
         help=(
             f"target presentation rate, {MIN_FPS}..{MAX_FPS} frames/s "
-            f"(built-in default: {DEFAULT_FPS})"
+            f"(default: {DEFAULT_FPS})"
         ),
     )
     parser.add_argument(
@@ -188,14 +186,14 @@ def _parser() -> argparse.ArgumentParser:
         metavar="RATIO",
         help=(
             "viewport fraction reserved on every edge, 0 <= RATIO < 0.5 "
-            f"(built-in default: {DEFAULT_MARGIN})"
+            f"(default: {DEFAULT_MARGIN})"
         ),
     )
     parser.add_argument(
         "--seed",
         type=int,
         metavar="INTEGER",
-        help=f"signed 64-bit deterministic effect seed (built-in default: {DEFAULT_SEED})",
+        help=f"signed 64-bit deterministic effect seed (default: {DEFAULT_SEED})",
     )
     parser.add_argument(
         "--scene",
