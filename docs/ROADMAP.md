@@ -206,8 +206,7 @@ acceptance is necessary evidence, not sufficient evidence that a scene looks goo
 
 ## Phase 11 — Scene-engine hardening and release readiness
 
-**Status:** complete locally (2026-09-08); first hosted CI run and public version
-selection remain release gates.
+**Status:** complete (2026-09-08).
 
 ### Goal
 
@@ -222,8 +221,8 @@ memory, and extend artifact checks to scene functionality.
   compilation, source CLI discovery, wheel build, isolated install, and installed
   scene parsing/rendering. The Windows workflow runs it at the supported Python range
   endpoints without requiring a graphical terminal.
-- The accidentally tracked `mojit.rar` is removed and present tracked ZIP/RAR files
-  fail the source gate.
+- The accidentally tracked `mojit.rar` is removed, and present tracked build outputs
+  or release archives fail the source gate.
 - Scene composition streams layer contributions. A 16-layer 960×540 test verifies
   deterministic completion and bounded live input buffers instead of retaining every
   full frame.
@@ -236,15 +235,29 @@ memory, and extend artifact checks to scene functionality.
   deterministic multi-layer construction/rendering, and legacy effect discovery.
 - The rebuilt release candidate passes wheel/bundle contracts, offline installed probes,
   and the user installer workflow on CPython 3.11, 3.12, 3.13, and 3.14.
-- The local source gate passes with 672 tests and 97.18% coverage. Hosted CI and live
-  graphical acceptance are separate evidence and are not claimed as run by this audit.
+- The local source gate passes with 673 tests and 97.19% coverage. Hosted Windows CI
+  passes the same gate on CPython 3.11 and 3.14. Live graphical acceptance and manual
+  longevity remain separately recorded evidence rather than headless-CI claims.
 
-### Remaining release gate
+### Release disposition
 
-The source and artifact tooling still use `1.0.0`, the documented v1 release version.
-No repository policy selects a post-v1 version, so this audit does not invent one.
-Choose the public version and update all metadata/artifact contracts before publishing.
-See [HARDENING.md](HARDENING.md) for the full disposition and evidence limits.
+The backward-compatible scene expansion is prepared as `1.1.0`. The root `VERSION`
+file drives package metadata, artifact names, installer discovery, and release
+contracts. No tag or GitHub release was created. See
+[HARDENING.md](HARDENING.md) for exact hosted, artifact, soak, and live evidence and
+its interpretation limits.
+
+---
+
+## Next milestone — Scene Config v2 and richer user-defined scenes
+
+**Status:** queued; not started.
+
+The next product increment should make the proven scene model more expressive for
+users while preserving the strict version 1 contract. Its exact schema, optional-text
+semantics, and parameter surface require a bounded milestone plan before
+implementation. It must not be combined with native Kitty support or a speculative
+plugin/rendering framework.
 
 ---
 
@@ -252,10 +265,10 @@ See [HARDENING.md](HARDENING.md) for the full disposition and evidence limits.
 
 This section is intentionally **not active work**.
 
-After Phases 7-10 are mature, the project may evaluate a native Kitty-terminal
-backend and richer image-oriented layers. At that point, use measured capabilities of
-an actual second terminal backend to extract only the abstractions that are genuinely
-shared.
+After the scene-configuration milestone is mature, the project may evaluate a native
+Kitty-terminal backend and richer image-oriented layers. At that point, use measured
+capabilities of an actual second terminal backend to extract only the abstractions
+that are genuinely shared.
 
 Do not pre-build a universal terminal framework now.
 

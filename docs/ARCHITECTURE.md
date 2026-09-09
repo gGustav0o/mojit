@@ -1,6 +1,6 @@
 # Architecture boundaries
 
-Status: current boundaries through Phase 10 plus constraints for post-v1 evolution.
+Status: current boundaries through Phase 11 plus constraints for post-v1 evolution.
 
 The detailed sections below describe the implemented v1 architecture and remain
 constraints unless deliberately superseded. Product direction is defined in
@@ -85,7 +85,9 @@ The production `TextMask` is a full-viewport alpha plane. Its origin is fixed at
 
 Core arrays are isolated C-contiguous `uint8` buffers backed by immutable bytes.
 Callers cannot mutate a `TextMask` or `Frame` through the source ndarray or by
-re-enabling the stored array's write flag.
+re-enabling the stored array's write flag. Construction copies mutable or uncertain
+caller storage, while provably immutable bytes-backed arrays can transfer ownership
+without a redundant full-plane copy.
 
 The font adapter is the filesystem boundary: it returns immutable bytes and a SHA-256
 content identity. Typography receives no path or open file handle. `TypographyKey`
@@ -129,8 +131,9 @@ receives the same validated `RenderContext` and must return an immutable full-vi
 `Frame`; the boundary rejects non-frame and mismatched-viewport results before
 presentation. The first contribution is retained unchanged for a one-layer scene.
 Multi-layer scenes stream validated layer frames into one in-place Pillow source-over
-pass and create one immutable result. Previously all layer frames remained live until
-composition completed; the streaming fold now bounds simultaneous contribution
+pass and create one immutable result directly from Pillow's immutable output bytes.
+Previously all layer frames remained live until composition completed; the streaming
+fold now bounds simultaneous contribution
 ownership independently of configured layer count. This makes z-order and viewport
 clipping explicit without a retained scene graph, ECS, plugin API, or backend
 knowledge.

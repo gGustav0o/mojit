@@ -41,13 +41,13 @@ offline bundle:
 
 ```powershell
 .\tools\release\build_artifacts.ps1
-Expand-Archive .\dist\release\mojit-1.0.0-windows-x64-wheelhouse.zip .\mojit-wheelhouse
+Expand-Archive .\dist\release\mojit-1.1.0-windows-x64-wheelhouse.zip .\mojit-wheelhouse
 ```
 
 Verify the ZIP against `dist/release/SHA256SUMS.txt`:
 
 ```powershell
-$archive = Resolve-Path .\dist\release\mojit-1.0.0-windows-x64-wheelhouse.zip
+$archive = Resolve-Path .\dist\release\mojit-1.1.0-windows-x64-wheelhouse.zip
 $expected = (Select-String -LiteralPath .\dist\release\SHA256SUMS.txt -Pattern "  $([IO.Path]::GetFileName($archive))$").Line.Split(" ")[0]
 $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -ne $expected) { throw "Release archive checksum mismatch" }
@@ -157,7 +157,9 @@ Release-candidate construction and the full offline CPython matrix remain separa
 
 Graphical WezTerm acceptance is intentionally not part of headless CI. Run it from a
 disposable interactive pane with the installed-artifact helper documented in
-`tools/release/run_installed_live.ps1`.
+`tools/release/run_installed_live.ps1`. Its resize case needs both a vertical and a
+horizontal split boundary; use a target pane in a small grid. The helper checks this
+topology before starting.
 
 ## Longevity evidence
 
@@ -166,13 +168,14 @@ but they do not prove stable process memory. For a sustained measurement of the 
 Python renderer process, run:
 
 ```powershell
-.\.venv\Scripts\python.exe .\tools\scene_soak.py --duration-seconds 600 --output scene-memory.json
+New-Item -ItemType Directory -Force .\build\evidence | Out-Null
+.\.venv\Scripts\python.exe .\tools\scene_soak.py --duration-seconds 600 --output .\build\evidence\scene-memory.json
 ```
 
 To exercise the maximum supported scene layer count at a large viewport:
 
 ```powershell
-.\.venv\Scripts\python.exe .\tools\scene_soak.py --duration-seconds 600 --width 1920 --height 1080 --layer-count 16 --output scene-memory-16-layers.json
+.\.venv\Scripts\python.exe .\tools\scene_soak.py --duration-seconds 600 --width 1920 --height 1080 --layer-count 16 --output .\build\evidence\scene-memory-16-layers.json
 ```
 
 The probe samples Windows working set and private bytes after warmup and reports raw
@@ -181,9 +184,9 @@ automatic leak verdict: Python, NumPy, and Pillow allocators may retain arenas, 
 short or single before/after sample is not a meaningful bound. The live WezTerm soak
 now records the renderer process and terminal emulator separately.
 
-The repository still declares version `1.0.0`, the released v1 compatibility version.
-No post-v1 public version has been selected in project policy, so choose and update the
-version consistently before publishing any scene-engine release.
+The prepared post-v1 release version is `1.1.0`. The root `VERSION` file is the
+authoritative source for package metadata, artifact names, and release verification.
+Preparing these artifacts does not publish a GitHub release or create a tag.
 
 The project is MIT-licensed. FriBiDi remains LGPL-2.1-or-later and separately
 replaceable; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
